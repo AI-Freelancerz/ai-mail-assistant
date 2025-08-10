@@ -2,6 +2,7 @@ import datetime
 import os
 import base64
 import json
+import time
 
 # Import Brevo SDK
 import brevo_python as sib_api_v3_sdk
@@ -24,10 +25,6 @@ def _log_failed_email_to_file(sender_email, to_email, subject, body, error_messa
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(entry)
-
-
-
-
 
 def _build_message_versions(messages):
     """
@@ -163,3 +160,46 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
         for msg in messages:
             _log_failed_email_to_file(sender_email, msg['to_email'], msg.get('subject', ''), msg.get('body', ''), err)
         return {'status': 'error', 'message': err}
+
+def get_email_events(message_ids: list):
+    """
+    Retrieves the event history for a list of message IDs from Brevo.
+
+    :param message_ids: A list of message ID strings (e.g., '<...-...@smtp-relay.mailin.fr>').
+    :return: A dictionary where keys are message IDs and values are a list of event dicts
+             or a list containing a single error event dict.
+    """
+    if not message_ids:
+        return {}
+
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key['api-key'] = BREVO_API_KEY
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+
+    results = {}
+    for msg_id in message_ids:
+        if not isinstance(msg_id, str) or '@' not in msg_id:
+            results[msg_id] = [{'event': 'error', 'reason': 'Invalid Message ID format'}]
+            continue
+
+        try:
+            # The API expects the full message_id, often including angle brackets
+            api_response = api_instance.get_email_event_report(message_id=msg_id)
+            # The response object has an 'events' attribute which is a list of objects
+            results[msg_id] = [e.to_dict() for e in api_response.events] if api_response.events else []
+        except ApiException as e:
+            err_body = e.body
+            try:
+                # Brevo often returns JSON in the body, try to parse it
+                err_json = json.loads(err_body)
+                err_reason = err_json.get('message', err_body)
+            except (json.JSONDecodeError, AttributeError):
+                err_reason = str(err_body)
+            results[msg_id] = [{'event': 'error', 'reason': err_reason}]
+        except Exception as e:
+            results[msg_id] = [{'event': 'error', 'reason': str(e)}]
+
+        # A small delay to avoid hitting API rate limits.
+        time.sleep(0.3)
+
+    return results

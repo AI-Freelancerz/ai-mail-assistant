@@ -20,30 +20,41 @@ class SmartEmailAgent:
         self.client = openai.OpenAI(api_key=self.openai_api_key)
         self.model = model
 
-    def generate_email_template(self, prompt, user_email_context="", output_language="en", personalize_emails=False):
+    def generate_email_template(
+        self,
+        prompt,
+        user_email_context="",
+        output_language="en",
+        personalize_emails=False,
+        generate_nonpersonalized_greeting=True
+    ):
         """
         Generates an email subject and body template using OpenAI's GPT model.
-        The template will contain placeholders like {{Name}} and {{Email}}.
         
         Args:
             prompt (str): The user's request for the email content.
             user_email_context (str): Additional context or style preferences for the email.
             output_language (str): The desired language for the email output (e.g., "en", "fr").
-            personalize_emails (bool): If True, the agent should include personalization placeholders.
-
-        Returns:
-            dict: A dictionary containing 'subject' and 'body' of the generated email template.
-                  Returns error message if generation fails.
+            personalize_emails (bool): If True, include personalization placeholders.
+            generate_nonpersonalized_greeting (bool): If True and personalize_emails=False,
+                generate a generic greeting. If False and personalize_emails=False,
+                start directly from the body without a salutation.
         """
-        
-        personalization_hint = ""
+
+        print(f"Generating - {personalize_emails}, {generate_nonpersonalized_greeting}")
+        # Decide on greeting behavior
         if personalize_emails:
-            # If personalization is ON, instruct AI to use placeholders.
-            personalization_hint = "INCLUDE specific name and email placeholders where appropriate (e.g., 'Dear {{Name}}', 'contact us at {{Email}}')."
+            personalization_hint = (
+                "INCLUDE a specific name placeholder where appropriate "
+                "(e.g., 'Dear {{Name}}')"
+            )
         else:
-            # If personalization is OFF, instruct AI NOT to use placeholders and NOT to include a greeting.
-            # The application will prepend a generic greeting later.
-            personalization_hint = "DO NOT include any name or email placeholders (like '{{Name}}' or '{{Email}}'). DO NOT include any salutation (e.g., 'Dear', 'Hello', 'Bonjour', 'Salut'). Start directly with the main body of the email content. The application will add a generic greeting or salutation if necessary."
+            if generate_nonpersonalized_greeting:
+                personalization_hint = "INCLUDE a generic greeting"
+            else:
+                personalization_hint = (
+                    "DO NOT include any salutation or greeting — start directly from the main body"
+                )
 
         system_message = (
             "You are an AI assistant specialized in drafting professional and effective email templates. "
@@ -53,10 +64,9 @@ class SmartEmailAgent:
             "Here are the rules for generating the email:\n"
             f"- {personalization_hint}\n"
             "- Ensure the email content is relevant to the prompt and context.\n"
-            "- The 'body' should be a single string, including paragraph breaks (use '\\n\\n' for new paragraphs).\n"
+            "- The 'body' should be a single string, including paragraph breaks (use '\\n' for new paragraphs).\n"
             "- Avoid conversational filler like 'Here is the email:' or 'Subject: ... Body: ...'."
         )
-
         user_message_content = f"User's request: {prompt}"
         if user_email_context:
             user_message_content += f"\nAdditional context/style: {user_email_context}"
@@ -79,14 +89,8 @@ class SmartEmailAgent:
             if "subject" not in email_template or "body" not in email_template:
                 raise ValueError("AI response missing 'subject' or 'body' key.")
             
-            # Clean up body to remove potential leading/trailing whitespace or accidental AI salutations
+            # REMOVED the regex cleaning of salutations from here.
             email_template['body'] = email_template['body'].strip()
-            # Further refinement: Remove common salutations if they accidentally slipped through
-            # This is a fallback in case the AI ignores the system prompt.
-            common_salutations_regex = r"^(Dear|Hello|Hi|Bonjour|Salut|Chers?|Cher|Chère)\s+[^,\n]*[,!.]?\s*\n\n*"
-            email_template['body'] = re.sub(common_salutations_regex, "", email_template['body'], flags=re.IGNORECASE | re.MULTILINE)
-            email_template['body'] = email_template['body'].strip()
-
 
             return email_template
 
