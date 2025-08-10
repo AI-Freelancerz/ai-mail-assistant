@@ -41,7 +41,6 @@ class SmartEmailAgent:
                 start directly from the body without a salutation.
         """
 
-        print(f"Generating - {personalize_emails}, {generate_nonpersonalized_greeting}")
         # Decide on greeting behavior
         if personalize_emails:
             personalization_hint = (
