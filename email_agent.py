@@ -20,7 +20,14 @@ class SmartEmailAgent:
         self.client = openai.OpenAI(api_key=self.openai_api_key)
         self.model = model
 
-    def generate_email_template(self, prompt, user_email_context="", output_language="en", personalize_emails=False):
+    def generate_email_template(
+        self,
+        prompt,
+        user_email_context="",
+        output_language="en",
+        personalize_emails=False,
+        generate_nonpersonalized_greeting=True
+    ):
         """
         Generates an email subject and body template using OpenAI's GPT model.
         
@@ -28,18 +35,26 @@ class SmartEmailAgent:
             prompt (str): The user's request for the email content.
             user_email_context (str): Additional context or style preferences for the email.
             output_language (str): The desired language for the email output (e.g., "en", "fr").
-            personalize_emails (bool): If True, the agent should include personalization placeholders.
-
-        Returns:
-            dict: A dictionary containing 'subject' and 'body' of the generated email template.
-                  Returns error message if generation fails.
+            personalize_emails (bool): If True, include personalization placeholders.
+            generate_nonpersonalized_greeting (bool): If True and personalize_emails=False,
+                generate a generic greeting. If False and personalize_emails=False,
+                start directly from the body without a salutation.
         """
-        
-        personalization_hint = ""
+
+        print(f"Generating - {personalize_emails}, {generate_nonpersonalized_greeting}")
+        # Decide on greeting behavior
         if personalize_emails:
-            personalization_hint = "INCLUDE a specific name placeholder where appropriate (e.g., 'Dear {{Name}}')"
+            personalization_hint = (
+                "INCLUDE a specific name placeholder where appropriate "
+                "(e.g., 'Dear {{Name}}')"
+            )
         else:
-            personalization_hint = "INCLUDE a generic greeting"
+            if generate_nonpersonalized_greeting:
+                personalization_hint = "INCLUDE a generic greeting"
+            else:
+                personalization_hint = (
+                    "DO NOT include any salutation or greeting — start directly from the main body"
+                )
 
         system_message = (
             "You are an AI assistant specialized in drafting professional and effective email templates. "
@@ -52,7 +67,6 @@ class SmartEmailAgent:
             "- The 'body' should be a single string, including paragraph breaks (use '\\n' for new paragraphs).\n"
             "- Avoid conversational filler like 'Here is the email:' or 'Subject: ... Body: ...'."
         )
-
         user_message_content = f"User's request: {prompt}"
         if user_email_context:
             user_message_content += f"\nAdditional context/style: {user_email_context}"

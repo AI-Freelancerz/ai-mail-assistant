@@ -228,40 +228,42 @@ def _add_greeting_to_body(body_content, greeting_text, current_language):
 # --- Business Logic ---
 def generate_email_preview_and_template():
     st.session_state.generation_in_progress = True
-    # Ensure OPENAI_API_KEY is available. config.py should handle this.
     if not OPENAI_API_KEY:
         st.error(_t("OpenAI API Key is not configured. Please set it in Streamlit secrets."))
         st.session_state.generation_in_progress = False
         return
 
     agent = SmartEmailAgent(openai_api_key=OPENAI_API_KEY)
-    
+
+    generate_nonpersonalized_greeting = not bool(st.session_state.generic_greeting.strip())
+
     template = agent.generate_email_template(
         prompt=st.session_state.user_prompt,
         user_email_context=st.session_state.user_email_context,
         output_language=st.session_state.language,
-        personalize_emails=st.session_state.personalize_emails
+        personalize_emails=st.session_state.personalize_emails,
+        generate_nonpersonalized_greeting=generate_nonpersonalized_greeting
     )
-    
+
     st.session_state.template_subject = template['subject']
     st.session_state.template_body = template['body']
     st.session_state.editable_subject = template['subject']
     st.session_state.editable_body = template['body']
 
-    # Apply greeting to editable_body only if not personalizing
-    if not st.session_state.personalize_emails:
+    # Apply greeting manually only if not personalizing AND we did NOT ask the agent to add one
+    if not st.session_state.personalize_emails and not generate_nonpersonalized_greeting:
         actual_greeting = st.session_state.generic_greeting if st.session_state.generic_greeting else _t("Valued Customer")
         st.session_state.editable_body = _add_greeting_to_body(
             st.session_state.editable_body,
             actual_greeting,
             st.session_state.language
         )
-        st.session_state.template_body = st.session_state.editable_body # Keep template_body updated too
-        
+        st.session_state.template_body = st.session_state.editable_body
+
     st.session_state.generation_in_progress = False
-    st.session_state.email_generated = True # Set flag to show generated email fields
-    st.session_state.page = 'preview' # Set page to preview after generation
-    st.rerun() # Rerun to display the generated email
+    st.session_state.email_generated = True
+    st.session_state.page = 'preview'
+    st.rerun()
 
 # NEW: Function to refresh events for a specific message ID
 def refresh_message_events(message_id, message_index):
