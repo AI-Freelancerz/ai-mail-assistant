@@ -318,14 +318,11 @@ def send_all_emails():
                     subj = subj.replace(ph, "")
                     body = body.replace(ph, "")
 
-            # ensure HTML formatting
-            body_html = body.replace("\n", "<br>\n")
-
             messages.append({
                 "to_email": email,
                 "to_name": name,
                 "subject": subj,
-                "body": body_html
+                "body": body
             })
 
         # Send all at once
