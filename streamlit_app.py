@@ -712,44 +712,43 @@ def page_results():
         )
     
     st.markdown("---")
-    # Display individual message details and refresh buttons
-    if st.session_state.message_details:
-        st.subheader(_t("Individual Email Status & Events"))
-        for i, msg_detail in enumerate(st.session_state.message_details):
-            with st.expander(f"Recipient: {msg_detail['recipient']} | Message ID: {msg_detail['message_id']}"):
-                st.markdown(f"**Recipient:** `{msg_detail['recipient']}`")
-                st.markdown(f"**Message ID:** `{msg_detail['message_id']}`")
-                
-                # Refresh button for this specific message
-                if st.button(_t("Refresh Events for this Email"), key=f"refresh_event_{msg_detail['message_id']}_{i}"):
-                    refresh_message_events(msg_detail['message_id'], i)
-                
-                st.markdown("**Events:**")
-                if msg_detail['events']:
-                    for event in msg_detail['events']:
-                        event_type = event.get('event', 'N/A')
-                        event_date = event.get('_date', 'N/A')
-                        reason = event.get('reason', 'N/A')
-                        st.markdown(f"- **Type:** `{event_type}` | **Date:** `{event_date}` | **Reason:** `{reason}`")
-                else:
-                    st.info(_t("No events found yet for this message. Click 'Refresh Events' to check."))
-    else:
-        st.info(_t("No detailed message status available."))
+    # Drawer: Delivery details (per-message statuses) + logs, opened by default
+    with st.expander(_t("Show Activity Log and Errors"), expanded=False):
+        # Per-message statuses moved inside the drawer and shown expanded (no per-message expanders)
+        if st.session_state.message_details:
+            st.subheader(_t("Individual Email Status & Events"))
+            for i, msg_detail in enumerate(st.session_state.message_details):
+                with st.container(border=True):
+                    st.markdown(f"**Recipient:** `{msg_detail['recipient']}`")
+                    st.markdown(f"**Message ID:** `{msg_detail['message_id']}`")
 
-    st.markdown("---")
-    if st.button(_t("Show Activity Log and Errors"), use_container_width=True, key="show_log_button"):
+                    # Refresh button for this specific message
+                    if st.button(_t("Refresh Events for this Email"), key=f"refresh_event_{msg_detail['message_id']}_{i}"):
+                        refresh_message_events(msg_detail['message_id'], i)
+
+                    st.markdown("**Events:**")
+                    if msg_detail['events']:
+                        for event in msg_detail['events']:
+                            event_type = event.get('event', 'N/A')
+                            event_date = event.get('_date', 'N/A')
+                            reason = event.get('reason', 'N/A')
+                            st.markdown(f"- **Type:** `{event_type}` | **Date:** `{event_date}` | **Reason:** `{reason}`")
+                    else:
+                        st.info(_t("No events found yet for this message. Click 'Refresh Events' to check."))
+        else:
+            st.info(_t("No detailed message status available."))
+
+        st.markdown("---")
+        # Activity log lives inside the same drawer; no extra totals here
         st.subheader(_t("Activity Log"))
-        # Using a container to display log entries dynamically
-        log_display_container = st.container() 
+        log_display_container = st.container()
         if st.session_state.email_sending_status:
             for log_entry in st.session_state.email_sending_status:
-                # Check for different types of log entries and format accordingly
                 if "❌" in log_entry or "error" in log_entry.lower() or "failed" in log_entry.lower():
                     log_display_container.error(log_entry)
                 elif "✅" in log_entry or "success" in log_entry.lower():
                     log_display_container.success(log_entry)
                 elif "📋" in log_entry or log_entry.strip().startswith("   "):  # Message ID entries
-                    # Use a special container for message IDs with monospace font
                     log_display_container.markdown(f"```{log_entry}```")
                 elif "⚠️" in log_entry:
                     log_display_container.warning(log_entry)
