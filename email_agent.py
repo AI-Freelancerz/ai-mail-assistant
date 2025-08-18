@@ -44,8 +44,9 @@ class SmartEmailAgent:
         # Decide on greeting behavior
         if personalize_emails:
             personalization_hint = (
-                "INCLUDE a specific name placeholder where appropriate "
-                "(e.g., 'Dear {{Name}}')"
+                "INCLUDE a specific '{{Name}}'/'{{Nom}}' placeholder where appropriate "
+                "(e.g., 'Dear {{Name}}'); "
+                "INCLUDE ONLY '{{Name}}'/'{{Nom}}' placeholders and no other '{{}}'"
             )
         else:
             if generate_nonpersonalized_greeting:
