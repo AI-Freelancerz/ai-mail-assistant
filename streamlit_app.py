@@ -64,6 +64,28 @@ div.stActionButton, div.stDownloadButton, div.stFileUploadDropzone {
     border-color: #1a4fbd;
 }
 
+/* Minimal metric-like card styling */
+.colored-metric {
+    background: white;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid rgba(0,0,0,0.06);
+}
+.colored-metric .cm-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.2;
+    opacity: 0.95;
+}
+.colored-metric .cm-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-top: 0.25rem;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -192,6 +214,22 @@ def render_step_indicator(current_step: int):
         step_html += "</div>"
     step_html += "</div>"
     st.markdown(step_html, unsafe_allow_html=True)
+
+# New helper: colored metric block
+
+def colored_metric(label: str, value, label_color: str, value_color: str) -> None:
+    """Render a simple metric-like card with independently colored label and value."""
+    safe_label = str(label)
+    safe_value = str(value)
+    st.markdown(
+        f"""
+        <div class="colored-metric">
+            <div class="cm-label" style="color:{label_color};">{safe_label}</div>
+            <div class="cm-value" style="color:{value_color};">{safe_value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # --- Helper function for adding greeting ---
 def _add_greeting_to_body(body_content, greeting_text, current_language):
@@ -649,13 +687,29 @@ def page_results():
         st.info(_t("No emails were processed."))
     st.markdown("---")
 
+    # Colored metrics instead of st.metric
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(_t("Total Contacts Processed"), total)
+        colored_metric(
+            _t("Total Contacts Processed"),
+            f"{total}",
+            label_color="#334155",    # slate-700
+            value_color="#2563eb",    # blue-600
+        )
     with col2:
-        st.metric(_t("Emails Sent Successfully"), successful)
+        colored_metric(
+            _t("Emails Sent Successfully"),
+            f"{successful}",
+            label_color="#166534",    # green-800
+            value_color="#22c55e",    # green-500
+        )
     with col3:
-        st.metric(_t("Emails Failed to Send"), failed)
+        colored_metric(
+            _t("Emails Failed to Send"),
+            f"{failed}",
+            label_color="#991b1b",    # red-800
+            value_color="#ef4444",    # red-500
+        )
     
     st.markdown("---")
     # Display individual message details and refresh buttons
