@@ -110,6 +110,7 @@ TRANSLATIONS = {
         "Upload Excel (.xlsx/.xls)": "Importer un fichier Excel (.xlsx/.xls)",
         "Successfully loaded {count} valid contacts.": "Chargement réussi de {count} contacts valides.",
         "Please upload an Excel file to get started.": "Veuillez importer un fichier Excel pour commencer.",
+        "WARNING: Some contacts had issues (e.g., missing/invalid/duplicate emails). They will be skipped.": "AVERTISSEMENT : Certains contacts posent problème (e.g., e-mails manquants/invalides/dupliqués). Ils seront ignorés.",
         "Next": "Suivant",
         "Personalize emails?": "Personnaliser les e-mails ?",
         "Generic Greeting (e.g., 'Dear Valued Customer')": "Salutation Générique (ex: 'Cher Client')",
