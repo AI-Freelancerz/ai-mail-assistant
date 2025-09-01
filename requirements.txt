@@ -7,3 +7,4 @@ langchain-openai
 openpyxl
 streamlit
 brevo-python
+android-sms-gateway
