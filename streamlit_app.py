@@ -15,10 +15,9 @@ try:
     from ui_sms import render as render_sms_ui
 except Exception:
     render_sms_ui = None
-print("AI_MESSENGER_MODE:", AI_MESSENGER_MODE)
+
 # --- Mode gate: route to SMS-only UI when AI_MESSENGER_MODE=sms ---
 if AI_MESSENGER_MODE == "sms":
-    print("SMS mode enabled via AI_MESSENGER_MODE")
     if render_sms_ui is None:
         # Keep this string translated if _t is available in your imports.
         try:
