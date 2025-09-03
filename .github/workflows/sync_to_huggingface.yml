@@ -1,0 +1,23 @@
+name: Sync to Hugging Face Hub
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+      - name: Push to Hugging Face Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "youremail@example.com"
+          git config --global user.name "Your Name"
+          git remote add space https://shirlyb:$HF_TOKEN@huggingface.co/spaces/shirlyb/AI-mail-assistant.git
+          git push --force space main
