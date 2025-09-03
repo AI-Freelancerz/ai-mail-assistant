@@ -14,14 +14,13 @@
 #   * Extend translations.py with the new keys (EN + HE if present) used below.
 #   * Wire proper country-aware E.164 normalization (DEFAULT_SMS_COUNTRY) if needed.
 
-from __future__ import annotations
-
-import re
 from typing import List, Dict, Optional
 
 import pandas as pd
 import streamlit as st
-
+import tempfile
+import shutil
+import os # Import os for path existence check
 try:
     # Project-local translation function
     from translations import _t
@@ -47,84 +46,13 @@ except Exception:
     def get_sms_event(message_id: str) -> Dict[str, str]:  # type: ignore
         return {"message_id": message_id, "state": "queued", "updated_at": None}
 
+# Import the new data handler for phone numbers
+from data_handler_phone_numbers import load_contacts_from_excel
+
 
 # ---------------------------
 # Helpers (kept minimal)
 # ---------------------------
-PHONE_COLUMN_CANDIDATES = {
-    "phone", "phones", "telephone", "tel", "mobile", "mobile_phone",
-    "cell", "cellphone", "מטל", "טלפון", "פלאפון", "נייד",
-}
-NAME_COLUMN_CANDIDATES = {
-    "name", "full_name", "שם", "contact", "recipient",
-    "first name", "last name", "first", "last",
-}
-
-
-def _find_first_matching_column(df: pd.DataFrame, candidates: set[str]) -> Optional[str]:
-    lower_map = {c.lower(): c for c in df.columns}
-    for cand in candidates:
-        if cand in lower_map:
-            return lower_map[cand]
-    # Try looser contains check
-    for c in df.columns:
-        lc = c.lower()
-        if any(cand in lc for cand in candidates):
-            return c
-    return None
-
-
-def _looks_like_e164(phone: str) -> bool:
-    return bool(re.fullmatch(r"\+[0-9]{6,15}", phone.strip()))
-
-
-def _normalize_phone_minimal(raw: str) -> Optional[str]:
-    if not isinstance(raw, str):
-        raw = str(raw)
-    raw = raw.strip()
-    # Minimal v1 rule: accept only E.164-like strings that start with '+' and digits.
-    if _looks_like_e164(raw):
-        return raw
-    return None
-
-
-def _compose_name(row: pd.Series, name_col: Optional[str]) -> str:
-    if name_col and pd.notna(row.get(name_col)):
-        return str(row.get(name_col))
-    # Try first/last heuristic
-    first = None
-    last = None
-    for c in row.index:
-        lc = c.lower()
-        if "first" in lc:
-            first = row.get(c)
-        if "last" in lc:
-            last = row.get(c)
-    parts = [p for p in [first, last] if isinstance(p, str) and p.strip()]
-    return " ".join(parts) if parts else ""
-
-
-def _extract_recipients_from_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a DataFrame with columns [name, phone] for valid phone rows only."""
-    if df.empty:
-        return pd.DataFrame(columns=["name", "phone"])
-
-    phone_col = _find_first_matching_column(df, PHONE_COLUMN_CANDIDATES)
-    name_col = _find_first_matching_column(df, NAME_COLUMN_CANDIDATES)
-
-    rows = []
-    for _, row in df.iterrows():
-        raw_phone = row.get(phone_col) if phone_col else None
-        if pd.isna(raw_phone):
-            continue
-        phone = _normalize_phone_minimal(str(raw_phone))
-        if not phone:
-            continue
-        name = _compose_name(row, name_col)
-        rows.append({"name": name, "phone": phone})
-
-    return pd.DataFrame(rows, columns=["name", "phone"]) if rows else pd.DataFrame(columns=["name", "phone"])
-
 
 def _status_badge(state: Optional[str]) -> str:
     state = (state or "").lower()
@@ -154,60 +82,102 @@ def render() -> None:
     st.session_state.setdefault("sms_text", "")
     st.session_state.setdefault("sms_send_result", None)
     st.session_state.setdefault("sms_message_details", [])  # list of dicts
+    st.session_state.setdefault("contacts", []) # List of dicts from data_handler_phone_numbers
+    st.session_state.setdefault("contact_issues", []) # List of strings from data_handler_phone_numbers
+    st.session_state.setdefault("uploaded_file_name", None) # To track if the file has changed by name
+    st.session_state.setdefault("uploaded_file_path", None) # To store path for access
 
     st.markdown("---")
     st.header(_t("Upload Contacts"))
 
-    uploaded = st.file_uploader(_t("Upload an Excel file with contacts"), type=["xlsx", "xls"])
+    uploaded_file = st.file_uploader(_t("Upload an Excel file with contacts"), type=["xlsx", "xls"])
 
-    contacts_df: Optional[pd.DataFrame] = None
-    if uploaded is not None:
-        try:
-            contacts_df = pd.read_excel(uploaded)
-            st.session_state["contacts"] = contacts_df  # Reuse canonical key
-            st.success(_t("Contacts loaded"))
-        except Exception as e:
-            st.error(_t("Failed to read the Excel file. Please verify the format."))
-            st.stop()
-    else:
-        # Consider existing contacts in session_state (if user navigated back)
-        if isinstance(st.session_state.get("contacts"), pd.DataFrame):
-            contacts_df = st.session_state.get("contacts")
+    # Process file only if a new file is uploaded (by name or initial upload)
+    if uploaded_file is not None and \
+       (st.session_state.uploaded_file_name is None or \
+        st.session_state.uploaded_file_name != uploaded_file.name):
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_file:
+            shutil.copyfileobj(uploaded_file, tmp_file)
+            st.session_state.uploaded_file_path = tmp_file.name # Store path for access
+        
+        st.session_state.uploaded_file_name = uploaded_file.name
+        
+        # Use the new data handler
+        contacts, issues = load_contacts_from_excel(st.session_state.uploaded_file_path)
+        st.session_state.contacts = contacts
+        st.session_state.contact_issues = issues
+        
+        if issues:
+            st.warning(_t("WARNING: Some contacts had issues (e.g., missing/invalid phone numbers). They will be skipped."))
+            for issue in issues:
+                st.info(f"  - {issue}")
+        
+        if contacts:
+            st.success(_t("Successfully loaded {count} valid contacts.", count=len(contacts)))
+        else:
+            st.error(_t("No valid contacts found in the Excel file."))
 
-    # Derive recipients table
-    recipients_df = _extract_recipients_from_df(contacts_df) if contacts_df is not None else pd.DataFrame(columns=["name", "phone"])
+    # Consider existing contacts in session_state (if user navigated back)
+    if not st.session_state.contacts and st.session_state.uploaded_file_name:
+        # If contacts were cleared but file name exists, try reloading
+        if st.session_state.uploaded_file_path and os.path.exists(st.session_state.uploaded_file_path):
+            contacts, issues = load_contacts_from_excel(st.session_state.uploaded_file_path)
+            st.session_state.contacts = contacts
+            st.session_state.contact_issues = issues
+            if contacts:
+                st.success(_t("Re-loaded {count} valid contacts from previous upload.", count=len(contacts)))
+            if issues:
+                st.warning(_t("WARNING: Some contacts had issues (e.g., missing/invalid phone numbers). They will be skipped."))
+                for issue in issues:
+                    st.info(f"  - {issue}")
+        else:
+            st.info(_t("Please upload an Excel file to get started."))
+    elif not st.session_state.uploaded_file_name:
+        st.info(_t("Please upload an Excel file to get started."))
+
+
+    # Derive recipients table from st.session_state.contacts
+    # The data handler already returns contacts in the desired format: [{"name": "...", "phone_number": "..."}]
+    recipients_df = pd.DataFrame(st.session_state.contacts)
+    if not recipients_df.empty:
+        recipients_df = recipients_df.rename(columns={"phone_number": "phone"}) # Rename for UI consistency
 
     if recipients_df.empty:
-        st.warning(_t("No recipients with a phone number found"))
+        # Only show this warning if a file has been uploaded and processed, but no valid recipients were found.
+        # Otherwise, the "Please upload an Excel file to get started." message should take precedence.
+        if st.session_state.uploaded_file_name: # This means a file was uploaded and processed
+            st.warning(_t("No recipients with a phone number found"))
         # We still render the compose box to let the user pre-write the SMS
     else:
         st.subheader(_t("Recipients"))
         st.dataframe(recipients_df, use_container_width=True, hide_index=True)
-        st.caption(_t("{n} recipients will receive this SMS").format(n=len(recipients_df)))
+        st.caption(_t("{n} recipients will receive this SMS", n=len(recipients_df)))
 
     st.markdown("---")
     st.header(_t("Compose"))
 
-    sms_text = st.text_area(
+    st.text_area(
         label=_t("SMS Text"),
         value=st.session_state.get("sms_text", ""),
         height=140,
         placeholder=_t("Write the SMS text here..."),
+        key="sms_text", # Bind directly to session_state
     )
-    st.session_state["sms_text"] = sms_text
 
     # Minimal character count hint (no GSM-7/UCS-2 segmentation yet)
-    st.caption(_t("Characters: {n}", n=len(sms_text or "")))
+    # Access sms_text directly from session_state for dynamic updates
+    st.caption(_t("Characters: {n}", n=len(st.session_state.sms_text or "")))
 
     st.markdown("---")
 
     # Send button row
     col_send, col_summary = st.columns([1, 2])
     with col_send:
-        disabled = recipients_df.empty or not (sms_text and sms_text.strip())
+        disabled = recipients_df.empty or not (st.session_state.sms_text and st.session_state.sms_text.strip())
         if st.button(_t("Send SMS"), type="primary", disabled=disabled):
             versions = [
-                {"recipient": row["phone"], "text": sms_text}
+                {"recipient": row["phone"], "text": st.session_state.sms_text}
                 for _, row in recipients_df.iterrows()
             ]
 
@@ -250,7 +220,7 @@ def render() -> None:
                     if failed == 0 and accepted > 0:
                         st.success(_t("SMS batch sent"))
                     elif accepted > 0 and failed > 0:
-                        st.warning(_t("Sent with some errors: {acc} accepted, {fail} failed").format(acc=accepted, fail=failed))
+                        st.warning(_t("Sent with some errors: {acc} accepted, {fail} failed", acc=accepted, fail=failed))
                     else:
                         st.error(_t("All messages failed to send"))
 
@@ -293,7 +263,7 @@ def render() -> None:
                     if msg.get("error"):
                         st.error(str(msg.get("error")))
                     else:
-                        st.caption(_t("Last checked: {ts}").format(ts=msg.get("last_checked_at") or _t("n/a")))
+                        st.caption(_t("Last checked: {ts}", ts=msg.get("last_checked_at") or _t("n/a")))
 
 
 # If this file is executed directly (rare in Streamlit), render for convenience.
