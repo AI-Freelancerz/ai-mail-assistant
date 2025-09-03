@@ -197,7 +197,7 @@ def render() -> None:
     st.session_state["sms_text"] = sms_text
 
     # Minimal character count hint (no GSM-7/UCS-2 segmentation yet)
-    st.caption(_t("Characters: {n}").format(n=len(sms_text or "")))
+    st.caption(_t("Characters: {n}", n=len(sms_text or "")))
 
     st.markdown("---")
 
