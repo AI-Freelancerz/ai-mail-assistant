@@ -278,11 +278,12 @@ def generate_professional_button_html(button_text, button_url, button_color="#e5
     Generate professional button HTML similar to the email marketing example provided.
     Uses the same structure: a -> span -> div pattern with proper styling.
     """
+    # REDUCED FONT SIZE AND PADDING
     return f"""
-    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255);font-family:Arial;font-style:inherit;font-weight:inherit;font-size:11px" target="_blank">
-        <span style="margin:0px;padding:5px 10px;border:5px solid {button_color};display:block;background-color:{button_color};border-radius:5px">
-            <div style="margin:0px;padding:0px;border:0px;text-align:center;font-size:16px;color:rgb(255,255,255)">
-                <span style="margin:0px;padding:0px;border:0px;font-size:16px">{button_text}<br></span>
+    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255);font-family:Arial;font-style:inherit;font-weight:inherit;font-size:5px" target="_blank">
+        <span style="margin:0px;padding:1px 3px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
+            <div style="margin:0px;padding:0px;border:0px;text-align:center;font-size:6px;color:rgb(255,255,255)">
+                <span style="margin:0px;padding:0px;border:0px;font-size:6px">{button_text}</span>
             </div>
         </span>
     </a>
@@ -371,20 +372,23 @@ def send_all_emails():
             
             # Add text before custom button if exists
             if st.session_state.custom_button_text_before:
+                # REDUCED MARGIN FOR P TAG
                 full_button_html += f"""
-                    <p style="margin: 10px 0; font-size: 14px;">
+                    <p style="margin: 5px 0; font-size: 14px;">
                         {st.session_state.custom_button_text_before}
                     </p>
                 """
             
             custom_button_html = generate_professional_button_html(custom_btn_text, custom_btn_url, custom_btn_color)
-            full_button_html += f"""<br><br>{custom_button_html}"""
+            # REDUCED BR TAGS
+            full_button_html += f"""<br>{custom_button_html}"""
         
         # Always add the donate button last
         donate_btn_text = _t("Donate Button Text")
         donate_btn_url = _t("Donate Button URL")
         donate_button_html = generate_professional_button_html(donate_btn_text, donate_btn_url)
-        full_button_html += f"""<br><br>{donate_button_html}"""
+        # REDUCED BR TAGS
+        full_button_html += f"""<br>{donate_button_html}"""
         
         full_button_html += "</div>"
         ### END UPDATED FEATURE ###
@@ -415,7 +419,8 @@ def send_all_emails():
                     body = body.replace(ph, "")
 
             # Append button HTML to the end of the email body
-            body_with_buttons = f"{body}<br><br>{full_button_html}"
+            # REDUCED BR TAGS
+            body_with_buttons = f"{body}<br>{full_button_html}"
             
             messages.append({
                 "to_email": email,
@@ -744,20 +749,23 @@ def page_preview():
                     
                     # Add text before custom button if exists
                     if st.session_state.custom_button_text_before:
+                        # REDUCED MARGIN FOR P TAG
                         full_button_html += f"""
-                            <p style="margin: 10px 0; font-size: 14px;">
+                            <p style="margin: 5px 0; font-size: 14px;">
                                 {st.session_state.custom_button_text_before}
                             </p>
                         """
                     
                     custom_button_html = generate_professional_button_html(custom_btn_text, custom_btn_url, custom_btn_color)
-                    full_button_html += f"""<br><br>{custom_button_html}"""
+                    # REDUCED BR TAGS
+                    full_button_html += f"""<br>{custom_button_html}"""
                 
                 # Always add the donate button last
                 donate_btn_text = _t("Donate Button Text")
                 donate_btn_url = _t("Donate Button URL")
                 donate_button_html = generate_professional_button_html(donate_btn_text, donate_btn_url)
-                full_button_html += f"""<br><br>{donate_button_html}"""
+                # REDUCED BR TAGS
+                full_button_html += f"""<br>{donate_button_html}"""
                 
                 full_button_html += "</div>"
                 
@@ -918,6 +926,7 @@ def page_results():
                 del st.session_state[k]
         init_state() # Re-initialize to default states
         st.rerun() # Force a rerun to restart the app
+
 
 # --- Main Navigation ---
 if st.session_state.page == 'generate':
