@@ -7,9 +7,26 @@ import re
 from data_handler import load_contacts_from_excel # Assuming this exists
 from email_agent import SmartEmailAgent # Assuming this exists
 from email_tool import send_bulk_email_messages, get_email_events
-from config import SENDER_EMAIL, OPENAI_API_KEY, BREVO_API_KEY # Assuming these exist
+from config import SENDER_EMAIL, OPENAI_API_KEY, BREVO_API_KEY, AI_MESSENGER_MODE # Assuming these exist
 from translations import LANGUAGES, _t, set_language # Assuming these exist
 import datetime
+import os
+try:
+    from ui_sms import render as render_sms_ui
+except Exception:
+    render_sms_ui = None
+
+# --- Mode gate: route to SMS-only UI when AI_MESSENGER_MODE=sms ---
+if AI_MESSENGER_MODE == "sms":
+    if render_sms_ui is None:
+        # Keep this string translated if _t is available in your imports.
+        try:
+            st.error(_t("SMS mode is enabled but the SMS UI module is missing. Please ensure ui_sms.py is available."))
+        except Exception:
+            st.error("SMS mode is enabled but the SMS UI module is missing. Please ensure ui_sms.py is available.")
+    else:
+        render_sms_ui()
+    st.stop()
 
 # --- CSS Styling ---
 st.markdown("""
