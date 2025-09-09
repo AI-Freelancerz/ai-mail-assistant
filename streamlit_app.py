@@ -70,7 +70,7 @@ div.stActionButton, div.stDownloadButton, div.stFileUploadDropzone {
 
 .stButton>button:hover {
     border-color: #2563eb; /* Blue border on hover */
-    box-shadow: 0 44px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
 /* Styling for the SELECTED language button (primary type) */
@@ -162,6 +162,15 @@ def init_state():
         st.session_state.email_generated = False # New flag to control display of generated email fields
         st.session_state.message_details = [] # NEW: To store structured message IDs and their events
         st.session_state.initialized = True
+        
+        ### NEW FEATURE: Donate & Custom Buttons ###
+        st.session_state.add_custom_button = False
+        st.session_state.custom_button_text = ''
+        st.session_state.custom_button_url = ''
+        st.session_state.custom_button_color = '#0e2fc2'  # Default blue color like the example
+        st.session_state.custom_button_text_before = ''  # NEW: Text before custom button
+        ### END NEW FEATURE ###
+        
 init_state()
 
 # Ensure message_details is initialized at the top level
@@ -287,6 +296,23 @@ def _add_greeting_to_body(body_content, greeting_text, current_language):
     
     return body_prefix + body_content
 
+# --- Helper function to generate professional button HTML ---
+def generate_professional_button_html(button_text, button_url, button_color="#e52937"):
+    """
+    Generate professional button HTML similar to the email marketing example provided.
+    Uses the same structure: a -> span -> div pattern with proper styling.
+    """
+    # REDUCED FONT SIZE AND PADDING
+    return f"""
+    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255);font-family:Arial;font-style:inherit;font-weight:inherit;font-size:9px" target="_blank">
+        <span style="margin:0px;padding:2px 5px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
+            <div style="margin:0px;padding:0px;border:0px;text-align:center;font-size:12px;color:rgb(255,255,255)">
+                <span style="margin:0px;padding:0px;border:0px;font-size:12px">{button_text}</span>
+            </div>
+        </span>
+    </a>
+    """
+
 # --- Business Logic ---
 def generate_email_preview_and_template():
     st.session_state.generation_in_progress = True
@@ -357,6 +383,59 @@ def send_all_emails():
 
         # Build the list of message dicts
         messages = []
+        
+        ### UPDATED FEATURE: Professional Email Buttons ###
+        # We'll build the full button HTML once, before the loop
+        full_button_html = "" # Start with an empty string
+        
+        # Add custom button first, if enabled
+        if st.session_state.add_custom_button and st.session_state.custom_button_text and st.session_state.custom_button_url:
+            custom_btn_text = st.session_state.custom_button_text
+            custom_btn_url = st.session_state.custom_button_url
+            custom_btn_color = st.session_state.custom_button_color
+            
+            # Add text before custom button if exists
+            if st.session_state.custom_button_text_before:
+                full_button_html += f"""
+                    <div style="text-align: center;">
+                        <p style="margin: 5px 0; font-size: 14px;">
+                            {st.session_state.custom_button_text_before}
+                        </p>
+                """
+            else:
+                full_button_html += f"""<div style="text-align: center;">"""
+                
+            custom_button_html = generate_professional_button_html(custom_btn_text, custom_btn_url, custom_btn_color)
+            full_button_html += f"""{custom_button_html}<br>"""
+        
+        # Add the donation button and its text
+        donate_text_above = _t("Je souhaite continuer de participer à équiper et sauver les soldats d'Israel, je fais un don en ligne, déductible à 66% de mon impôt sur le revenu.")
+        donate_btn_text = _t("Donate Button Text")
+        donate_btn_url = _t("Donate Button URL")
+        donate_button_html = generate_professional_button_html(donate_btn_text, donate_btn_url)
+
+        if not st.session_state.add_custom_button:
+            # If no custom button, we need to open the div here
+            full_button_html += f"""<div style="text-align: center;">"""
+
+        full_button_html += f"""
+            <p style="margin: 5px 0; font-size: 14px;">{donate_text_above}</p>
+            <br>{donate_button_html}
+        """
+        
+        #full_button_html += "</div>" # Close the centered div
+        ### END UPDATED FEATURE ###
+
+        # NEW: Footer HTML with unsubscribe and association info
+        footer_html = f"""
+            <br><br>
+            <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
+                <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                <br>
+                <p style="margin: 0; padding: 0;"><a href="[UNSUBSCRIBE]" style="color: #888888;">Se désinscrire</a></p>
+            </div>
+        """
+        
         for contact in st.session_state.contacts:
             email = contact.get('email')
             name  = contact.get('name', '')
@@ -382,11 +461,14 @@ def send_all_emails():
                     subj = subj.replace(ph, "")
                     body = body.replace(ph, "")
 
+            # Append the footer and button HTML to the end of the email body
+            body_with_buttons = f"{body}<br>{full_button_html}<br>{footer_html}"
+            
             messages.append({
                 "to_email": email,
                 "to_name": name,
                 "subject": subj,
-                "body": body
+                "body": body_with_buttons
             })
 
         # Send all at once
@@ -539,6 +621,54 @@ def page_generate():
                 key="generic_greeting_input"
             )
 
+        ### UPDATED FEATURE: Enhanced Custom Button Options ###
+        st.markdown("---")
+        st.markdown(f"**{_t('Email Buttons Configuration')}**")
+        
+        st.session_state.add_custom_button = st.checkbox(
+            _t("Add a Custom Button?"),
+            value=st.session_state.add_custom_button,
+            key="custom_button_checkbox"
+        )
+        
+        if st.session_state.add_custom_button:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.session_state.custom_button_text = st.text_input(
+                    _t("Custom Button Text"),
+                    value=st.session_state.custom_button_text,
+                    placeholder=_t("e.g., 'Learn More'"),
+                    key="custom_button_text_input"
+                )
+                st.session_state.custom_button_url = st.text_input(
+                    _t("Button URL"),
+                    value=st.session_state.custom_button_url,
+                    placeholder=_t("e.g., 'https://your-website.com'"),
+                    key="custom_button_url_input"
+                )
+                st.session_state.custom_button_text_before = st.text_input(
+                    _t("Text Before Button"),
+                    value=st.session_state.custom_button_text_before,
+                    placeholder=_t("e.g., 'Click the button below to learn more'"),
+                    key="custom_button_text_before_input"
+                )
+            with col2:
+                st.session_state.custom_button_color = st.color_picker(
+                    _t("Button Color"),
+                    value=st.session_state.custom_button_color,
+                    key="custom_button_color_input"
+                )
+
+        # Color preview
+                st.markdown(f"""
+                <div style="background-color: {st.session_state.custom_button_color}; 
+                           color: white; padding: 8px; border-radius: 5px; 
+                           text-align: center; margin-top: 10px;">
+                    {_t("Preview Color")}
+                </div>
+                """, unsafe_allow_html=True)
+        ### END UPDATED FEATURE ###
+
         st.markdown("---")
         if st.button(
             _t("Generate Email"),
@@ -648,9 +778,73 @@ def page_preview():
                     for ph in ["{{Name}}","{{Nom}}","{{Email}}","{{Courriel}}"]:
                         preview_subj = preview_subj.replace(ph, "")
                         preview_body = preview_body.replace(ph, "")
+
+                ### UPDATED FEATURE: Professional Button Preview ###
+                # We'll build the full button HTML once, before the loop
+                full_button_html = "" # Start with an empty string
                 
+                # Add custom button first, if enabled
+                if st.session_state.add_custom_button and st.session_state.custom_button_text and st.session_state.custom_button_url:
+                    custom_btn_text = st.session_state.custom_button_text
+                    custom_btn_url = st.session_state.custom_button_url
+                    custom_btn_color = st.session_state.custom_button_color
+                    
+                    # Add text before custom button if exists
+                    if st.session_state.custom_button_text_before:
+                        full_button_html += f"""
+                            <div style="text-align: center;">
+                                <p style="margin: 5px 0; font-size: 14px;">
+                                    {st.session_state.custom_button_text_before}
+                                </p>
+                        """
+                    else:
+                        full_button_html += f"""<div style="text-align: center;">"""
+                        
+                    custom_button_html = generate_professional_button_html(custom_btn_text, custom_btn_url, custom_btn_color)
+                    full_button_html += f"""{custom_button_html}<br>"""
+                
+                # Add the donation button and its text
+                donate_text_above = _t("Je souhaite continuer de participer à équiper et sauver les soldats d'Israel, je fais un don en ligne, déductible à 66% de mon impôt sur le revenu.")
+                donate_btn_text = _t("Donate Button Text")
+                donate_btn_url = _t("Donate Button URL")
+                donate_button_html = generate_professional_button_html(donate_btn_text, donate_btn_url)
+
+                if not st.session_state.add_custom_button:
+                    # If no custom button, we need to open the div here
+                    full_button_html += f"""<div style="text-align: center;">"""
+                
+                full_button_html += f"""
+                    <p style="margin: 5px 0; font-size: 14px;">{donate_text_above}</p>
+                    <br>{donate_button_html}
+                """
+                
+                full_button_html += "</div>" # Close the centered div
+                
+                # NEW: Footer HTML with unsubscribe and association info
+                footer_html = f"""
+                    <br><br>
+                    <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
+                        <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                        <br>
+                        <p style="margin: 0; padding: 0;"><a href="[UNSUBSCRIBE]" style="color: #888888;">Se désinscrire</a></p>
+                    </div>
+                """
+                
+                # Display the preview body normally
                 st.text_input(_t("Subject"), value=preview_subj, disabled=True, key="preview_subj_display")
-                st.text_area(_t("Body"), value=preview_body, height=350, disabled=True, key="preview_body_display")
+                
+                # Display the email body normally
+                st.write(preview_body)
+                
+                # Add a horizontal line separator
+                st.markdown("---", unsafe_allow_html=True)
+                
+                # Display the new combined footer, starting with buttons
+                st.markdown(full_button_html, unsafe_allow_html=True)
+                
+                # Then display the association info and unsubscribe link
+                st.markdown(footer_html, unsafe_allow_html=True)
+            
             else:
                 st.info(_t("Upload contacts in the first step to see a preview."))
 
