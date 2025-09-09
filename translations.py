@@ -85,7 +85,10 @@ TRANSLATIONS = {
         "Body": "Body",
         "Subject": "Subject",
         "Donate Button Text": "Donate Now",
-        "Donate Button URL": "https://www.migdal-france.org/MIGDAL-FRANCE_WEB/FR/PAIEMENT_STRIPE/DONS-PAIEMENT-CB.awp"
+        "Donate Button URL": "https://www.migdal-france.org/MIGDAL-FRANCE_WEB/FR/PAIEMENT_STRIPE/DONS-PAIEMENT-CB.awp",
+        "Tax Refund Text": "Your donation is eligible for a 66% tax refund.",
+        "Association Info": "Migdal France | 1 rue de la Paix, 75002 Paris | contact@migdal-france.org",
+        "Unsubscribe Text": "To unsubscribe from our mailing list, please click here."
     },
     "fr": {
         "AI Email Assistant": "Assistant Courriel IA",
@@ -164,7 +167,10 @@ TRANSLATIONS = {
         "Body": "Corps du message",
         "Subject": "Sujet",
         "Donate Button Text": "Faire un don",
-        "Donate Button URL": "https://www.migdal-france.org/MIGDAL-FRANCE_WEB/FR/PAIEMENT_STRIPE/DONS-PAIEMENT-CB.awp"
+        "Donate Button URL": "https://www.migdal-france.org/MIGDAL-FRANCE_WEB/FR/PAIEMENT_STRIPE/DONS-PAIEMENT-CB.awp",
+        "Tax Refund Text": "Votre don est éligible à une déduction fiscale de 66%.",
+        "Association Info": "Migdal France | 1 rue de la Paix, 75002 Paris | contact@migdal-france.org",
+        "Unsubscribe Text": "Pour vous désinscrire de notre liste de diffusion, veuillez cliquer ici."
     }
 }
 
