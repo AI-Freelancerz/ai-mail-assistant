@@ -8,3 +8,4 @@ openpyxl
 streamlit
 brevo-python
 android-sms-gateway
+streamlit-authenticator

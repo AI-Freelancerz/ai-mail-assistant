@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import shutil
 import tempfile
-import re
+from streamlit_login import render_login_form
 from data_handler import load_contacts_from_excel # Assuming this exists
 from email_agent import SmartEmailAgent # Assuming this exists
 from email_tool import send_bulk_email_messages, get_email_events
@@ -15,6 +15,13 @@ try:
     from ui_sms import render as render_sms_ui
 except Exception:
     render_sms_ui = None
+
+# --- NEW: Authentication Check & Early Exit ---
+# This line calls the function that renders the login form.
+# If the user is not successfully authenticated, it returns False.
+if not render_login_form():
+    # If not authenticated, stop the app execution right here.
+    st.stop()
 
 # --- Mode gate: route to SMS-only UI when AI_MESSENGER_MODE=sms ---
 if AI_MESSENGER_MODE == "sms":
