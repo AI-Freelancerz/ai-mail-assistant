@@ -16,7 +16,6 @@ TRANSLATIONS = {
         "Compose your email details below.": "Compose your email details below.",
         "Recipient": "Recipient",
         "Subject": "Subject",
-        "Body": "Body",
         "Sender": "Sender",
         "Clear Form": "Clear Form",
         "Your email has been generated! You can modify it below.": "Your email has been generated! You can modify it below.",
@@ -34,8 +33,7 @@ TRANSLATIONS = {
         "Back to Generation": "Back to Generation",
         "Editable Email Content": "Editable Email Content",
         "Live Preview for First Contact": "Live Preview for First Contact",
-        "Edit the email template here. Changes will reflect in the live preview.": "Edit the email template here. Changes will reflect in the live preview.",
-        "This shows how the email will appear for the first contact. To make changes, use the *Editable Email Content* section on the left.": "This shows how the email will appear for the first contact. To make changes, use the *Editable Email Content* section on the left.",
+        "This shows how the email will appear for the first contact. To make changes, use the *Editable Email Content* section on the left.": "This shows how the email will appear for the first contact. To make changes, use the 'Editable Email Content' section on the left.",
         "Add Attachments": "Add Attachments",
         "Upload files": "Upload files",
         "Current Attachments": "Current Attachments",
@@ -52,8 +50,6 @@ TRANSLATIONS = {
         "Emails Failed to Send": "Emails Failed to Send",
         "Show Activity Log and Errors": "Show Activity Log and Errors",
         "Individual Email Status & Events": "Individual Email Status & Events",
-        "Recipient": "Recipient",
-        "Message ID": "Message ID",
         "Refresh Events for this Email": "Refresh Events for this Email",
         "Events": "Events",
         "No events found yet for this message. Click 'Refresh Events' to check.": "No events found yet for this message. Click 'Refresh Events' to check.",
@@ -81,11 +77,12 @@ TRANSLATIONS = {
         "Sender email credentials are not configured. Please set SENDER_EMAIL and BREVO_API_KEY in Streamlit secrets.": "Sender email credentials are not configured. Please set SENDER_EMAIL and BREVO_API_KEY in Streamlit secrets.",
         "Upload Excel (.xlsx/.xls)": "Upload Excel (.xlsx/.xls)",
         "Attachments selected: {count}": "Attachments selected: {count}",
-        "Preview": "Preview",
-        "Body": "Body",
-        "Subject": "Subject",
         "Donate Button Text": "Donate Now",
-        "Donate Button URL": "https://www.migdal-france.org/MIGDAL-FRANCE_WEB/FR/PAIEMENT_STRIPE/DONS-PAIEMENT-CB.awp"
+        "Donate Button URL": "https://www.migdal-france.org/MIGDAL-FRANCE_WEB/FR/PAIEMENT_STRIPE/DONS-PAIEMENT-CB.awp",
+        "Valued Customer": "Valued Customer", # New fallback generic greeting
+        "Language": "Language", # For the sidebar selectbox label
+        "Dear": "Dear", # Added for dynamic salutation prefix
+        "Characters: {n}": "Characters: {n}"
     },
     "fr": {
         "AI Email Assistant": "Assistant Courriel IA",
@@ -95,7 +92,6 @@ TRANSLATIONS = {
         "Compose your email details below.": "Composez les détails de votre courriel ci-dessous.",
         "Recipient": "Destinataire",
         "Subject": "Sujet",
-        "Body": "Corps du message",
         "Sender": "Expéditeur",
         "Clear Form": "Effacer le formulaire",
         "Your email has been generated! You can modify it below.": "Votre courriel a été généré! Vous pouvez le modifier ci-dessous.",
@@ -113,8 +109,8 @@ TRANSLATIONS = {
         "Back to Generation": "Retour à la Génération",
         "Editable Email Content": "Contenu du Courriel Modifiable",
         "Live Preview for First Contact": "Prévisualisation en Direct pour le Premier Contact",
-        "Edit the email template here. Changes will reflect in the live preview.": "Modifiez le modèle de courriel ici. Les changements se refléteront dans la prévisualisation en direct.",
-        "This shows how the email will appear for the first contact. To make changes, use the *Editable Email Content* section on the left.": "Ceci montre comment le courriel apparaîtra pour le premier contact. Pour apporter des modifications, utilisez la section *Contenu du Courriel Modifiable* sur la gauche.",
+        "Edit the email template here. Changes will reflect in the live preview.": "Modifiez le modèle d'e-mail ici. Les modifications se refléteront dans l'aperçu en direct.",
+        "This shows how the email will appear for the first contact. To make changes, use the *Editable Email Content* section on the left.": "Ceci montre l'apparence de l'e-mail pour le premier contact. Pour apporter des modifications, utilisez la section 'Contenu de l'e-mail modifiable' sur la gauche.",
         "Add Attachments": "Ajouter des Pièces Jointes",
         "Upload files": "Télécharger des fichiers",
         "Current Attachments": "Pièces Jointes Actuelles",
@@ -131,7 +127,6 @@ TRANSLATIONS = {
         "Emails Failed to Send": "Courriels non envoyés",
         "Show Activity Log and Errors": "Afficher le journal d'activité et les erreurs",
         "Individual Email Status & Events": "Statut et événements des courriels individuels",
-        "Recipient": "Destinataire",
         "Message ID": "ID du message",
         "Refresh Events for this Email": "Actualiser les événements pour ce courriel",
         "Events": "Événements",
@@ -160,11 +155,12 @@ TRANSLATIONS = {
         "Sender email credentials are not configured. Please set SENDER_EMAIL and BREVO_API_KEY in Streamlit secrets.": "Les informations d'identification de l'expéditeur ne sont pas configurées. Veuillez définir SENDER_EMAIL et BREVO_API_KEY dans les secrets de Streamlit.",
         "Upload Excel (.xlsx/.xls)": "Télécharger un fichier Excel (.xlsx/.xls)",
         "Attachments selected: {count}": "{count} pièces jointes sélectionnées",
-        "Preview": "Prévisualisation",
-        "Body": "Corps du message",
-        "Subject": "Sujet",
         "Donate Button Text": "Faire un don",
-        "Donate Button URL": "https://www.migdal-france.org/MIGDAL-FRANCE_WEB/FR/PAIEMENT_STRIPE/DONS-PAIEMENT-CB.awp"
+        "Donate Button URL": "https://www.migdal-france.org/MIGDAL-FRANCE_WEB/FR/PAIEMENT_STRIPE/DONS-PAIEMENT-CB.awp",
+        "Valued Customer": "Cher Client",
+        "Language": "Langue",
+        "Dear": "Bonjour", # Added for dynamic salutation prefix (translated to Bonjour for French)
+        "Characters: {n}": "Caractères : {n}"
     }
 }
 
@@ -198,4 +194,4 @@ def _t(key, **kwargs):
         return translation # Return unformatted string if formatting fails
     except IndexError as e:
         print(f"Translation Error: Index error {e} for key '{key}' in language '{_selected_lang}'. Original translation: '{translation}'")
-        return translation #...
+        return translation # Return unformatted string if formatting fails
