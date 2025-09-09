@@ -426,15 +426,8 @@ def send_all_emails():
         #full_button_html += "</div>" # Close the centered div
         ### END UPDATED FEATURE ###
 
-        # NEW: Footer HTML with unsubscribe and association info
-        footer_html = f"""
-            <br><br>
-            <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
-                <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
-                <br>
-                <p style="margin: 0; padding: 0;"><a href="[UNSUBSCRIBE]" style="color: #888888;">Se désinscrire</a></p>
-            </div>
-        """
+        # ⚠️ NEW: Corrected URL template
+        GOOGLE_FORM_UNSUBSCRIBE_URL_TEMPLATE = "https://docs.google.com/forms/d/e/1FAIpQLSeM9ZMN2UmmVtBTXMD2V1qaJYJjtEGTt64auNfOKJgK-zz3dw/viewform?usp=pp_url&entry.1980793212="
         
         for contact in st.session_state.contacts:
             email = contact.get('email')
@@ -460,6 +453,21 @@ def send_all_emails():
                 for ph in ["{{Name}}","{{Nom}}","{{Email}}","{{Courriel}}"]:
                     subj = subj.replace(ph, "")
                     body = body.replace(ph, "")
+                    
+                    
+            	
+            # ⚠️ NEW: Dynamically generate the unsubscribe link for this recipient
+            unsubscribe_url = f"{GOOGLE_FORM_UNSUBSCRIBE_URL_TEMPLATE}{email}"
+            # NEW: Footer HTML with unsubscribe and association info
+            footer_html = f"""
+                <br><br>
+                <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
+                    <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                    <br>
+                    <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
+                </div>
+            """
+            
 
             # Append the footer and button HTML to the end of the email body
             body_with_buttons = f"{body}<br>{full_button_html}<br>{footer_html}"
@@ -820,13 +828,18 @@ def page_preview():
                 
                 full_button_html += "</div>" # Close the centered div
                 
+                # ⚠️ NEW: Corrected URL template
+                GOOGLE_FORM_UNSUBSCRIBE_URL_TEMPLATE = "https://docs.google.com/forms/d/e/1FAIpQLSeM9ZMN2UmmVtBTXMD2V1qaJYJjtEGTt64auNfOKJgK-zz3dw/viewform?usp=pp_url&entry.1980793212="
+                unsubscribe_url = f"{GOOGLE_FORM_UNSUBSCRIBE_URL_TEMPLATE}{preview_email}"
+                
+                
                 # NEW: Footer HTML with unsubscribe and association info
                 footer_html = f"""
                     <br><br>
                     <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
                         <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
                         <br>
-                        <p style="margin: 0; padding: 0;"><a href="[UNSUBSCRIBE]" style="color: #888888;">Se désinscrire</a></p>
+                        <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
                     </div>
                 """
                 
