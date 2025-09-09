@@ -82,7 +82,10 @@ TRANSLATIONS = {
         "Valued Customer": "Valued Customer", # New fallback generic greeting
         "Language": "Language", # For the sidebar selectbox label
         "Dear": "Dear", # Added for dynamic salutation prefix
-        "Characters: {n}": "Characters: {n}"
+        "Characters: {n}": "Characters: {n}",
+        "Tax Refund Text": "Your donation is eligible for a 66% tax refund.",
+        "Association Info": "Migdal France | 1 rue de la Paix, 75002 Paris | contact@migdal-france.org",
+        "Unsubscribe Text": "To unsubscribe from our mailing list, please click here."
     },
     "fr": {
         "AI Email Assistant": "Assistant Courriel IA",
@@ -160,7 +163,10 @@ TRANSLATIONS = {
         "Valued Customer": "Cher Client",
         "Language": "Langue",
         "Dear": "Bonjour", # Added for dynamic salutation prefix (translated to Bonjour for French)
-        "Characters: {n}": "Caractères : {n}"
+        "Characters: {n}": "Caractères : {n}",
+        "Tax Refund Text": "Votre don est éligible à une déduction fiscale de 66%.",
+        "Association Info": "Migdal France | 1 rue de la Paix, 75002 Paris | contact@migdal-france.org",
+        "Unsubscribe Text": "Pour vous désinscrire de notre liste de diffusion, veuillez cliquer ici."
     }
 }
 

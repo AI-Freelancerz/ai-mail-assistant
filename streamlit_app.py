@@ -304,10 +304,10 @@ def generate_professional_button_html(button_text, button_url, button_color="#e5
     """
     # REDUCED FONT SIZE AND PADDING
     return f"""
-    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255);font-family:Arial;font-style:inherit;font-weight:inherit;font-size:5px" target="_blank">
-        <span style="margin:0px;padding:1px 3px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
-            <div style="margin:0px;padding:0px;border:0px;text-align:center;font-size:6px;color:rgb(255,255,255)">
-                <span style="margin:0px;padding:0px;border:0px;font-size:6px">{button_text}</span>
+    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255);font-family:Arial;font-style:inherit;font-weight:inherit;font-size:9px" target="_blank">
+        <span style="margin:0px;padding:2px 5px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
+            <div style="margin:0px;padding:0px;border:0px;text-align:center;font-size:12px;color:rgb(255,255,255)">
+                <span style="margin:0px;padding:0px;border:0px;font-size:12px">{button_text}</span>
             </div>
         </span>
     </a>
@@ -386,7 +386,7 @@ def send_all_emails():
         
         ### UPDATED FEATURE: Professional Email Buttons ###
         # We'll build the full button HTML once, before the loop
-        full_button_html = f"""<div style="text-align: center;">"""
+        full_button_html = "" # Start with an empty string
         
         # Add custom button first, if enabled
         if st.session_state.add_custom_button and st.session_state.custom_button_text and st.session_state.custom_button_url:
@@ -396,27 +396,46 @@ def send_all_emails():
             
             # Add text before custom button if exists
             if st.session_state.custom_button_text_before:
-                # REDUCED MARGIN FOR P TAG
                 full_button_html += f"""
-                    <p style="margin: 5px 0; font-size: 14px;">
-                        {st.session_state.custom_button_text_before}
-                    </p>
+                    <div style="text-align: center;">
+                        <p style="margin: 5px 0; font-size: 14px;">
+                            {st.session_state.custom_button_text_before}
+                        </p>
                 """
-            
+            else:
+                full_button_html += f"""<div style="text-align: center;">"""
+                
             custom_button_html = generate_professional_button_html(custom_btn_text, custom_btn_url, custom_btn_color)
-            # REDUCED BR TAGS
-            full_button_html += f"""<br>{custom_button_html}"""
+            full_button_html += f"""{custom_button_html}<br>"""
         
-        # Always add the donate button last
+        # Add the donation button and its text
+        donate_text_above = _t("Je souhaite continuer de participer à équiper et sauver les soldats d'Israel, je fais un don en ligne, déductible à 66% de mon impôt sur le revenu.")
         donate_btn_text = _t("Donate Button Text")
         donate_btn_url = _t("Donate Button URL")
         donate_button_html = generate_professional_button_html(donate_btn_text, donate_btn_url)
-        # REDUCED BR TAGS
-        full_button_html += f"""<br>{donate_button_html}"""
+
+        if not st.session_state.add_custom_button:
+            # If no custom button, we need to open the div here
+            full_button_html += f"""<div style="text-align: center;">"""
+
+        full_button_html += f"""
+            <p style="margin: 5px 0; font-size: 14px;">{donate_text_above}</p>
+            <br>{donate_button_html}
+        """
         
-        full_button_html += "</div>"
+        #full_button_html += "</div>" # Close the centered div
         ### END UPDATED FEATURE ###
 
+        # NEW: Footer HTML with unsubscribe and association info
+        footer_html = f"""
+            <br><br>
+            <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
+                <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                <br>
+                <p style="margin: 0; padding: 0;"><a href="[UNSUBSCRIBE]" style="color: #888888;">Se désinscrire</a></p>
+            </div>
+        """
+        
         for contact in st.session_state.contacts:
             email = contact.get('email')
             name  = contact.get('name', '')
@@ -442,9 +461,8 @@ def send_all_emails():
                     subj = subj.replace(ph, "")
                     body = body.replace(ph, "")
 
-            # Append button HTML to the end of the email body
-            # REDUCED BR TAGS
-            body_with_buttons = f"{body}<br>{full_button_html}"
+            # Append the footer and button HTML to the end of the email body
+            body_with_buttons = f"{body}<br>{full_button_html}<br>{footer_html}"
             
             messages.append({
                 "to_email": email,
@@ -763,7 +781,7 @@ def page_preview():
 
                 ### UPDATED FEATURE: Professional Button Preview ###
                 # We'll build the full button HTML once, before the loop
-                full_button_html = f"""<div style="text-align: center;">"""
+                full_button_html = "" # Start with an empty string
                 
                 # Add custom button first, if enabled
                 if st.session_state.add_custom_button and st.session_state.custom_button_text and st.session_state.custom_button_url:
@@ -773,25 +791,44 @@ def page_preview():
                     
                     # Add text before custom button if exists
                     if st.session_state.custom_button_text_before:
-                        # REDUCED MARGIN FOR P TAG
                         full_button_html += f"""
-                            <p style="margin: 5px 0; font-size: 14px;">
-                                {st.session_state.custom_button_text_before}
-                            </p>
+                            <div style="text-align: center;">
+                                <p style="margin: 5px 0; font-size: 14px;">
+                                    {st.session_state.custom_button_text_before}
+                                </p>
                         """
-                    
+                    else:
+                        full_button_html += f"""<div style="text-align: center;">"""
+                        
                     custom_button_html = generate_professional_button_html(custom_btn_text, custom_btn_url, custom_btn_color)
-                    # REDUCED BR TAGS
-                    full_button_html += f"""<br>{custom_button_html}"""
+                    full_button_html += f"""{custom_button_html}<br>"""
                 
-                # Always add the donate button last
+                # Add the donation button and its text
+                donate_text_above = _t("Je souhaite continuer de participer à équiper et sauver les soldats d'Israel, je fais un don en ligne, déductible à 66% de mon impôt sur le revenu.")
                 donate_btn_text = _t("Donate Button Text")
                 donate_btn_url = _t("Donate Button URL")
                 donate_button_html = generate_professional_button_html(donate_btn_text, donate_btn_url)
-                # REDUCED BR TAGS
-                full_button_html += f"""<br>{donate_button_html}"""
+
+                if not st.session_state.add_custom_button:
+                    # If no custom button, we need to open the div here
+                    full_button_html += f"""<div style="text-align: center;">"""
                 
-                full_button_html += "</div>"
+                full_button_html += f"""
+                    <p style="margin: 5px 0; font-size: 14px;">{donate_text_above}</p>
+                    <br>{donate_button_html}
+                """
+                
+                full_button_html += "</div>" # Close the centered div
+                
+                # NEW: Footer HTML with unsubscribe and association info
+                footer_html = f"""
+                    <br><br>
+                    <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
+                        <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                        <br>
+                        <p style="margin: 0; padding: 0;"><a href="[UNSUBSCRIBE]" style="color: #888888;">Se désinscrire</a></p>
+                    </div>
+                """
                 
                 # Display the preview body normally
                 st.text_input(_t("Subject"), value=preview_subj, disabled=True, key="preview_subj_display")
@@ -802,8 +839,11 @@ def page_preview():
                 # Add a horizontal line separator
                 st.markdown("---", unsafe_allow_html=True)
                 
-                # Display the buttons with unsafe HTML
+                # Display the new combined footer, starting with buttons
                 st.markdown(full_button_html, unsafe_allow_html=True)
+                
+                # Then display the association info and unsubscribe link
+                st.markdown(footer_html, unsafe_allow_html=True)
             
             else:
                 st.info(_t("Upload contacts in the first step to see a preview."))
