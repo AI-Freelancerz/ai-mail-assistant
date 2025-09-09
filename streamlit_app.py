@@ -304,10 +304,10 @@ def generate_professional_button_html(button_text, button_url, button_color="#e5
     """
     # REDUCED FONT SIZE AND PADDING
     return f"""
-    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255);font-family:Arial;font-style:inherit;font-weight:inherit;font-size:9px" target="_blank">
+    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255)" target="_blank">
         <span style="margin:0px;padding:2px 5px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
-            <div style="margin:0px;padding:0px;border:0px;text-align:center;font-size:12px;color:rgb(255,255,255)">
-                <span style="margin:0px;padding:0px;border:0px;font-size:12px">{button_text}</span>
+            <div style="margin:0px;padding:0px;border:0px;text-align:center">
+                <span style="margin:0px;padding:0px;border:0px">{button_text}</span>
             </div>
         </span>
     </a>
