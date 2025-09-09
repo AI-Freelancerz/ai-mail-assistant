@@ -300,17 +300,19 @@ def _add_greeting_to_body(body_content, greeting_text, current_language):
 def generate_professional_button_html(button_text, button_url, button_color="#e52937"):
     """
     Generate professional button HTML similar to the email marketing example provided.
-    Uses the same structure: a -> span -> div pattern with proper styling.
+    Button is centered and 50% width.
     """
-    # REDUCED FONT SIZE AND PADDING
+    # Center the button and set width to 50%
     return f"""
-    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255)" target="_blank">
-        <span style="margin:0px;padding:2px 5px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
-            <div style="margin:0px;padding:0px;border:0px;text-align:center">
-                <span style="margin:0px;padding:0px;border:0px">{button_text}</span>
-            </div>
-        </span>
-    </a>
+    <div style="width:100%;text-align:center;">
+        <a href="{button_url}" style="margin:0 auto;padding:0px;border:0px;text-align:center;text-decoration:none;display:inline-block;color:rgb(255,255,255);width:50%;" target="_blank">
+            <span style="margin:0px;padding:2px 5px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
+                <div style="margin:0px;padding:0px;border:0px;text-align:center">
+                    <span style="margin:0px;padding:0px;border:0px">{button_text}</span>
+                </div>
+            </span>
+        </a>
+    </div>
     """
 
 # --- Business Logic ---
