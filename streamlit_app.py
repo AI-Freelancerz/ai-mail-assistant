@@ -303,7 +303,7 @@ def generate_professional_button_html(button_text, button_url, button_color="#e5
     Button is centered and 50% width.
     """
     # Center the button and set width to 50%
-    return f"""
+    html = f"""
     <div style="width:100%;text-align:center;">
         <a href="{button_url}" style="margin:0 auto;padding:0px;border:0px;text-align:center;text-decoration:none;display:inline-block;color:rgb(255,255,255);width:50%;" target="_blank">
             <span style="margin:0px;padding:2px 5px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
@@ -314,6 +314,8 @@ def generate_professional_button_html(button_text, button_url, button_color="#e5
         </a>
     </div>
     """
+    # Remove newlines from the HTML string to prevent them from being converted to <br> tags
+    return "".join(line.strip() for line in html.splitlines())
 
 # --- Business Logic ---
 def generate_email_preview_and_template():
