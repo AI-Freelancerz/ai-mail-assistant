@@ -300,18 +300,20 @@ def _add_greeting_to_body(body_content, greeting_text, current_language):
 def generate_professional_button_html(button_text, button_url, button_color="#e52937"):
     """
     Generate professional button HTML similar to the email marketing example provided.
-    Uses the same structure: a -> span -> div pattern with proper styling.
+    Button is centered and 50% width.
     """
-    # REDUCED FONT SIZE AND PADDING
-    return f"""
-    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255);font-family:Arial;font-style:inherit;font-weight:inherit;font-size:9px" target="_blank">
-        <span style="margin:0px;padding:2px 5px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
-            <div style="margin:0px;padding:0px;border:0px;text-align:center;font-size:12px;color:rgb(255,255,255)">
-                <span style="margin:0px;padding:0px;border:0px;font-size:12px">{button_text}</span>
-            </div>
-        </span>
-    </a>
+    # Center the button and set width to 50%
+    html = f"""
+    <div style="width:100%;text-align:center;">
+        <a href="{button_url}" style="margin:0 auto;padding:0px;border:0px;text-align:center;text-decoration:none;display:inline-block;color:rgb(255,255,255);width:50%;" target="_blank">
+            <span style="margin:0px;padding:0px;border:1px solid {button_color};display:flex;background-color:{button_color};border-radius:10px;height:40px;align-items:center;justify-content:center">
+                <span style="margin:0px;padding:0px;border:0px;display:inline-block;line-height:40px;text-align:center;width:100%">{button_text}</span>
+            </span>
+        </a>
+    </div>
     """
+    # Remove newlines from the HTML string to prevent them from being converted to <br> tags
+    return "".join(line.strip() for line in html.splitlines())
 
 # --- Business Logic ---
 def generate_email_preview_and_template():
