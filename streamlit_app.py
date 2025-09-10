@@ -327,50 +327,65 @@ def generate_email_preview_and_template():
         st.session_state.generation_in_progress = False
         return
 
-    agent = SmartEmailAgent(openai_api_key=OPENAI_API_KEY)
+    # ADD LOADING SPINNER FOR EMAIL GENERATION
+    with st.spinner(_t("Generation d'email avec l'IA... Cela peut prendre quelques instants.")):
+        try:
+            agent = SmartEmailAgent(openai_api_key=OPENAI_API_KEY)
 
-    generate_nonpersonalized_greeting = not bool(st.session_state.generic_greeting.strip())
+            generate_nonpersonalized_greeting = not bool(st.session_state.generic_greeting.strip())
 
-    template = agent.generate_email_template(
-        prompt=st.session_state.user_prompt,
-        user_email_context=st.session_state.user_email_context,
-        output_language=st.session_state.language,
-        personalize_emails=st.session_state.personalize_emails,
-        generate_nonpersonalized_greeting=generate_nonpersonalized_greeting
-    )
+            template = agent.generate_email_template(
+                prompt=st.session_state.user_prompt,
+                user_email_context=st.session_state.user_email_context,
+                output_language=st.session_state.language,
+                personalize_emails=st.session_state.personalize_emails,
+                generate_nonpersonalized_greeting=generate_nonpersonalized_greeting
+            )
 
-    st.session_state.template_subject = template['subject']
-    st.session_state.template_body = template['body']
-    st.session_state.editable_subject = template['subject']
-    st.session_state.editable_body = template['body']
+            st.session_state.template_subject = template['subject']
+            st.session_state.template_body = template['body']
+            st.session_state.editable_subject = template['subject']
+            st.session_state.editable_body = template['body']
 
-    # Apply greeting manually only if not personalizing AND we did NOT ask the agent to add one
-    if not st.session_state.personalize_emails and not generate_nonpersonalized_greeting:
-        actual_greeting = st.session_state.generic_greeting if st.session_state.generic_greeting else _t("Valued Customer")
-        st.session_state.editable_body = _add_greeting_to_body(
-            st.session_state.editable_body,
-            actual_greeting,
-            st.session_state.language
-        )
-        st.session_state.template_body = st.session_state.editable_body
+            # Apply greeting manually only if not personalizing AND we did NOT ask the agent to add one
+            if not st.session_state.personalize_emails and not generate_nonpersonalized_greeting:
+                actual_greeting = st.session_state.generic_greeting if st.session_state.generic_greeting else _t("Valued Customer")
+                st.session_state.editable_body = _add_greeting_to_body(
+                    st.session_state.editable_body,
+                    actual_greeting,
+                    st.session_state.language
+                )
+                st.session_state.template_body = st.session_state.editable_body
 
-    st.session_state.generation_in_progress = False
-    st.session_state.email_generated = True
-    st.session_state.page = 'preview'
-    st.rerun()
+            st.session_state.generation_in_progress = False
+            st.session_state.email_generated = True
+            st.session_state.page = 'preview'
 
+            # Show success message
+            st.success(_t("Email template generated successfully!"))
+            st.rerun()
+
+        except Exception as e:
+            st.session_state.generation_in_progress = False
+            st.error(_t("Failed to generate email template: ") + str(e))
+            
+            
 # NEW: Function to refresh events for a specific message ID
-def refresh_message_events(message_id, message_index):
-    st.session_state.email_sending_status.append(f"Refreshing events for message ID: {message_id}...")
-    try:
-        new_events_data = get_email_events([message_id])
-        if message_id in new_events_data:
-            st.session_state.message_details[message_index]['events'] = new_events_data[message_id]
-            st.session_state.email_sending_status.append(f"✅ Events refreshed for {message_id}.")
-        else:
-            st.session_state.email_sending_status.append(f"⚠️ Could not find events for {message_id}.")
-    except Exception as e:
-        st.session_state.email_sending_status.append(f"❌ Error refreshing events for {message_id}: {e}")
+def refresh_message_events(message_id, message_index):   
+    with st.spinner(_t("Refreshing email events...")):
+        st.session_state.email_sending_status.append(f"Refreshing events for message ID: {message_id}...")
+        try:
+            new_events_data = get_email_events([message_id])
+            if message_id in new_events_data:
+                st.session_state.message_details[message_index]['events'] = new_events_data[message_id]
+                st.session_state.email_sending_status.append(f"✅ Events refreshed for {message_id}.")
+                st.success(_t("Events refreshed successfully!"))
+            else:
+                st.session_state.email_sending_status.append(f"⚠️ Could not find events for {message_id}.")
+                st.warning(_t("No events found for this message."))
+        except Exception as e:
+            st.session_state.email_sending_status.append(f"❌ Error refreshing events for {message_id}: {e}")
+            st.error(_t("Error refreshing events: ") + str(e))
     st.rerun()
 
 
@@ -378,180 +393,193 @@ def send_all_emails():
     st.session_state.sending_in_progress = True
     total_contacts = len(st.session_state.contacts)
 
-    # Prepare attachments in a temp dir
-    temp_attachment_paths = []
-    with tempfile.TemporaryDirectory() as temp_dir:
-        for uploaded_file in st.session_state.attachments:
-            path = os.path.join(temp_dir, uploaded_file.name)
-            with open(path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            temp_attachment_paths.append(path)
+    # ADD LOADING SPINNER FOR EMAIL SENDING
+    with st.spinner(_t("Preparing and sending emails... This may take several minutes for large lists.")):
+        try:
+            # Prepare attachments in a temp dir
+            temp_attachment_paths = []
+            with tempfile.TemporaryDirectory() as temp_dir:
+                for uploaded_file in st.session_state.attachments:
+                    path = os.path.join(temp_dir, uploaded_file.name)
+                    with open(path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    temp_attachment_paths.append(path)
 
-        # Build the list of message dicts
-        messages = []
-        
-        ### UPDATED FEATURE: Professional Email Buttons ###
-        # We'll build the full button HTML once, before the loop
-        full_button_html = "" # Start with an empty string
-        
-        # Add custom button first, if enabled
-        if st.session_state.add_custom_button and st.session_state.custom_button_text and st.session_state.custom_button_url:
-            custom_btn_text = st.session_state.custom_button_text
-            custom_btn_url = st.session_state.custom_button_url
-            custom_btn_color = st.session_state.custom_button_color
-            
-            # Add text before custom button if exists
-            if st.session_state.custom_button_text_before:
-                full_button_html += f"""
-                    <div style="text-align: center;">
-                        <p style="margin: 5px 0; font-size: 14px;">
-                            {st.session_state.custom_button_text_before}
-                        </p>
-                """
-            else:
-                full_button_html += f"""<div style="text-align: center;">"""
+                # Build the list of message dicts
+                messages = []
                 
-            custom_button_html = generate_professional_button_html(custom_btn_text, custom_btn_url, custom_btn_color)
-            full_button_html += f"""{custom_button_html}<br>"""
-        
-        # Add the donation button and its text
-        donate_text_above = _t("Je souhaite continuer de participer à équiper et sauver les soldats d'Israel, je fais un don en ligne, déductible à 66% de mon impôt sur le revenu.")
-        donate_btn_text = _t("Donate Button Text")
-        donate_btn_url = _t("Donate Button URL")
-        donate_button_html = generate_professional_button_html(donate_btn_text, donate_btn_url)
+                ### UPDATED FEATURE: Professional Email Buttons ###
+                # We'll build the full button HTML once, before the loop
+                full_button_html = "" # Start with an empty string
+                
+                # Add custom button first, if enabled
+                if st.session_state.add_custom_button and st.session_state.custom_button_text and st.session_state.custom_button_url:
+                    custom_btn_text = st.session_state.custom_button_text
+                    custom_btn_url = st.session_state.custom_button_url
+                    custom_btn_color = st.session_state.custom_button_color
+                    
+                    # Add text before custom button if exists
+                    if st.session_state.custom_button_text_before:
+                        full_button_html += f"""
+                            <div style="text-align: center;">
+                                <p style="margin: 5px 0; font-size: 14px;">
+                                    {st.session_state.custom_button_text_before}
+                                </p>
+                        """
+                    else:
+                        full_button_html += f"""<div style="text-align: center;">"""
+                        
+                    custom_button_html = generate_professional_button_html(custom_btn_text, custom_btn_url, custom_btn_color)
+                    full_button_html += f"""{custom_button_html}<br>"""
+                
+                # Add the donation button and its text
+                donate_text_above = _t("Je souhaite continuer de participer à équiper et sauver les soldats d'Israel, je fais un don en ligne, déductible à 66% de mon impôt sur le revenu.")
+                donate_btn_text = _t("Donate Button Text")
+                donate_btn_url = _t("Donate Button URL")
+                donate_button_html = generate_professional_button_html(donate_btn_text, donate_btn_url)
 
-        if not st.session_state.add_custom_button:
-            # If no custom button, we need to open the div here
-            full_button_html += f"""<div style="text-align: center;">"""
+                if not st.session_state.add_custom_button:
+                    # If no custom button, we need to open the div here
+                    full_button_html += f"""<div style="text-align: center;">"""
 
-        full_button_html += f"""
-            <p style="margin: 5px 0; font-size: 14px;">{donate_text_above}</p>
-            <br>{donate_button_html}
-        """
-        
-        #full_button_html += "</div>" # Close the centered div
-        ### END UPDATED FEATURE ###
+                full_button_html += f"""
+                    <p style="margin: 5px 0; font-size: 14px;">{donate_text_above}</p>
+                    <br>{donate_button_html}
+                """
+                
+                #full_button_html += "</div>" # Close the centered div
+                ### END UPDATED FEATURE ###
 
-        # ⚠️ NEW: Corrected URL template
-        GOOGLE_FORM_UNSUBSCRIBE_URL_TEMPLATE = "https://docs.google.com/forms/d/e/1FAIpQLSeM9ZMN2UmmVtBTXMD2V1qaJYJjtEGTt64auNfOKJgK-zz3dw/viewform?usp=pp_url&entry.1980793212="
-        
-        for contact in st.session_state.contacts:
-            email = contact.get('email')
-            name  = contact.get('name', '')
+                GOOGLE_FORM_UNSUBSCRIBE_URL_TEMPLATE = "https://docs.google.com/forms/d/e/1FAIpQLSeM9ZMN2UmmVtBTXMD2V1qaJYJjtEGTt64auNfOKJgK-zz3dw/viewform?usp=pp_url&entry.1980793212="
+                
+                for contact in st.session_state.contacts:
+                    email = contact.get('email')
+                    name  = contact.get('name', '')
 
-            if not email:
-                continue  # skip missing emails
+                    if not email:
+                        continue  # skip missing emails
 
-            # Start from the editable template
-            subj = st.session_state.editable_subject
-            body = st.session_state.editable_body
+                    # Start from the editable template
+                    subj = st.session_state.editable_subject
+                    body = st.session_state.editable_body
 
-            # Personalize if needed
-            if st.session_state.personalize_emails:
-                for ph in ["{{Name}}", "{{Nom}}"]:
-                    subj = subj.replace(ph, name)
-                    body = body.replace(ph, name)
-                for ph in ["{{Email}}", "{{Courriel}}"]:
-                    subj = subj.replace(ph, email)
-                    body = body.replace(ph, email)
+                    # Personalize if needed
+                    if st.session_state.personalize_emails:
+                        for ph in ["{{Name}}", "{{Nom}}"]:
+                            subj = subj.replace(ph, name)
+                            body = body.replace(ph, name)
+                        for ph in ["{{Email}}", "{{Courriel}}"]:
+                            subj = subj.replace(ph, email)
+                            body = body.replace(ph, email)
+                    else:
+                        # strip any leftover placeholders
+                        for ph in ["{{Name}}","{{Nom}}","{{Email}}","{{Courriel}}"]:
+                            subj = subj.replace(ph, "")
+                            body = body.replace(ph, "")
+                            
+                    # NEW: Dynamically generate the unsubscribe link for this recipient
+                    unsubscribe_url = f"{GOOGLE_FORM_UNSUBSCRIBE_URL_TEMPLATE}{email}"
+                    # NEW: Footer HTML with unsubscribe and association info
+                    footer_html = f"""
+                        <br><br>
+                        <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
+                            <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                            <br>
+                            <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
+                        </div>
+                    """
+
+                    # Append the footer and button HTML to the end of the email body
+                    body_with_buttons = f"{body}<br>{full_button_html}<br>{footer_html}"
+                    
+                    messages.append({
+                        "to_email": email,
+                        "to_name": name,
+                        "subject": subj,
+                        "body": body_with_buttons
+                    })
+
+                # Send all at once
+                result = send_bulk_email_messages(
+                    sender_email=SENDER_EMAIL,
+                    sender_name=SENDER_EMAIL.split('@')[0].replace('.', ' ').title(),
+                    messages=messages,
+                    attachments=temp_attachment_paths if temp_attachment_paths else None
+                )
+
+            # Build status & summary
+            status = []
+            result_status = result.get("status")
+            result_message = result.get("message", "")
+            
+            if result_status == "success":
+                message_ids = result.get("message_ids", [])
+                total_sent = result.get("total_sent", len(messages))
+                success = total_sent
+                fail = total_contacts - success
+                
+                # Add detailed status information
+                status.append(_t("✅ Bulk send completed successfully!"))
+                status.append(_t("📧 Total emails sent: ") + str(success))
+                status.append(_t("📊 Success rate: ") + f"{success}/{total_contacts} ({(success/total_contacts*100):.1f}%)")
+                  
+                # NEW: Populate st.session_state.message_details with structured data
+                st.session_state.message_details = []
+                if message_ids:
+                    # Fetch initial events (if any) for all messages
+                    with st.spinner(_t("Fetching email delivery status...")):
+                        email_events_initial = get_email_events(message_ids)
+                    for i, msg_id in enumerate(message_ids, 1):
+                        recipient_email = messages[i-1]['to_email'] if i <= len(messages) else f"Recipient {i}"
+                        st.session_state.message_details.append({
+                            'recipient': recipient_email,
+                            'message_id': msg_id,
+                            'events': email_events_initial.get(msg_id, []) # Store initial events
+                        })
+                
+                if fail > 0:
+                    status.append(f"⚠️¸ {fail} emails failed to send")
+                    
+            elif result_status == "partial_success":
+                # Extract success count from message
+                import re
+                success_match = re.search(r'(\d+) emails sent successfully', result_message)
+                success = int(success_match.group(1)) if success_match else 0
+                fail = total_contacts - success
+                status.append(f"⚠️¸ Partial success: {result_message}")
+                # For partial success, we might not have message_ids for all,
+                # so we'll just log the overall status.
+                st.session_state.message_details = [] # Clear any previous details
             else:
-                # strip any leftover placeholders
-                for ph in ["{{Name}}","{{Nom}}","{{Email}}","{{Courriel}}"]:
-                    subj = subj.replace(ph, "")
-                    body = body.replace(ph, "")
-                    
-                    
-            	
-            # ⚠️ NEW: Dynamically generate the unsubscribe link for this recipient
-            unsubscribe_url = f"{GOOGLE_FORM_UNSUBSCRIBE_URL_TEMPLATE}{email}"
-            # NEW: Footer HTML with unsubscribe and association info
-            footer_html = f"""
-                <br><br>
-                <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
-                    <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
-                    <br>
-                    <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
-                </div>
-            """
+                success = 0
+                fail = total_contacts
+                status.append(f"❌ Bulk send failed: {result_message}")
+                st.session_state.message_details = [] # Clear any previous details
+
+            st.session_state.email_sending_status = status
+            st.session_state.sending_summary = {
+                'total_contacts': total_contacts,
+                'successful': success,
+                'failed': fail
+            }
+            # Store detailed response data for the results page
+            st.session_state.detailed_response = result
+            st.session_state.page = 'results'
+            st.session_state.sending_in_progress = False
             
-
-            # Append the footer and button HTML to the end of the email body
-            body_with_buttons = f"{body}<br>{full_button_html}<br>{footer_html}"
+            # Show completion message
+            if success == total_contacts:
+                st.success(_t("All emails sent successfully!"))
+            elif success > 0:
+                st.warning(_t("Emails sent with some issues. Check the results page for details."))
+            else:
+                st.error(_t("Email sending failed. Please check the configuration and try again."))
+                
+            st.rerun()
             
-            messages.append({
-                "to_email": email,
-                "to_name": name,
-                "subject": subj,
-                "body": body_with_buttons
-            })
-
-        # Send all at once
-        result = send_bulk_email_messages(
-            sender_email=SENDER_EMAIL,
-            sender_name=SENDER_EMAIL.split('@')[0].replace('.', ' ').title(),
-            messages=messages,
-            attachments=temp_attachment_paths if temp_attachment_paths else None
-        )
-
-    # Build status & summary
-    status = []
-    result_status = result.get("status")
-    result_message = result.get("message", "")
-    
-    if result_status == "success":
-        message_ids = result.get("message_ids", [])
-        total_sent = result.get("total_sent", len(messages))
-        success = total_sent
-        fail = total_contacts - success
-        
-        # Add detailed status information
-        status.append(_t("✅ Bulk send completed successfully!"))
-        status.append(_t("📧 Total emails sent: ") + str(success))
-        status.append(_t("📊 Success rate: ") + f"{success}/{total_contacts} ({(success/total_contacts*100):.1f}%)")
-        
-        # NEW: Populate st.session_state.message_details with structured data
-        st.session_state.message_details = []
-        if message_ids:
-            # Fetch initial events (if any) for all messages
-            email_events_initial = get_email_events(message_ids)
-            for i, msg_id in enumerate(message_ids, 1):
-                recipient_email = messages[i-1]['to_email'] if i <= len(messages) else f"Recipient {i}"
-                st.session_state.message_details.append({
-                    'recipient': recipient_email,
-                    'message_id': msg_id,
-                    'events': email_events_initial.get(msg_id, []) # Store initial events
-                })
-        
-        if fail > 0:
-            status.append(f"⚠️ {fail} emails failed to send")
-            
-    elif result_status == "partial_success":
-        # Extract success count from message
-        import re
-        success_match = re.search(r'(\d+) emails sent successfully', result_message)
-        success = int(success_match.group(1)) if success_match else 0
-        fail = total_contacts - success
-        status.append(f"⚠️ Partial success: {result_message}")
-        # For partial success, we might not have message_ids for all,
-        # so we'll just log the overall status.
-        st.session_state.message_details = [] # Clear any previous details
-    else:
-        success = 0
-        fail = total_contacts
-        status.append(f"❌ Bulk send failed: {result_message}")
-        st.session_state.message_details = [] # Clear any previous details
-
-    st.session_state.email_sending_status = status
-    st.session_state.sending_summary = {
-        'total_contacts': total_contacts,
-        'successful': success,
-        'failed': fail
-    }
-    # Store detailed response data for the results page
-    st.session_state.detailed_response = result
-    st.session_state.page = 'results'
-    st.session_state.sending_in_progress = False
-    st.rerun()
+        except Exception as e:
+            st.session_state.sending_in_progress = False
+            st.error(_t("Error during email sending: ") + str(e))
 
 # --- Page: Generate ---
 def page_generate():
