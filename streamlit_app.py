@@ -302,17 +302,21 @@ def generate_professional_button_html(button_text, button_url, button_color="#e5
     Generate professional button HTML similar to the email marketing example provided.
     Button is centered and 50% width.
     """
-    # Center the button and set width to 50%
+
+    # Remove newlines from the HTML string to prevent them from being converted to <br> tags
+    import html as html_lib
+    safe_button_text = html_lib.escape(str(button_text))
+    safe_button_url = html_lib.escape(str(button_url), quote=True)
+    safe_button_color = html_lib.escape(str(button_color), quote=True)
     html = f"""
     <div style="width:100%;text-align:center;">
-        <a href="{button_url}" style="margin:0 auto;padding:0px;border:0px;text-align:center;text-decoration:none;display:inline-block;color:rgb(255,255,255);width:50%;" target="_blank">
-            <span style="margin:0px;padding:0px;border:1px solid {button_color};display:flex;background-color:{button_color};border-radius:10px;height:40px;align-items:center;justify-content:center">
-                <span style="margin:0px;padding:0px;border:0px;display:inline-block;line-height:40px;text-align:center;width:100%">{button_text}</span>
+        <a href="{safe_button_url}" style="margin:0 auto;padding:0px;border:0px;text-align:center;text-decoration:none;display:inline-block;color:rgb(255,255,255);width:50%;" target="_blank">
+            <span style="margin:0px;padding:0px;border:1px solid {safe_button_color};display:flex;background-color:{safe_button_color};border-radius:10px;height:40px;align-items:center;justify-content:center">
+                <span style="margin:0px;padding:0px;border:0px;display:inline-block;line-height:40px;text-align:center;width:100%">{safe_button_text}</span>
             </span>
         </a>
     </div>
     """
-    # Remove newlines from the HTML string to prevent them from being converted to <br> tags
     return "".join(line.strip() for line in html.splitlines())
 
 # --- Business Logic ---
