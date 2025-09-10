@@ -300,24 +300,18 @@ def _add_greeting_to_body(body_content, greeting_text, current_language):
 def generate_professional_button_html(button_text, button_url, button_color="#e52937"):
     """
     Generate professional button HTML similar to the email marketing example provided.
-    Button is centered and 50% width.
+    Uses the same structure: a -> span -> div pattern with proper styling.
     """
-
-    # Remove newlines from the HTML string to prevent them from being converted to <br> tags
-    import html as html_lib
-    safe_button_text = html_lib.escape(str(button_text))
-    safe_button_url = html_lib.escape(str(button_url), quote=True)
-    safe_button_color = html_lib.escape(str(button_color), quote=True)
-    html = f"""
-    <div style="width:100%;text-align:center;">
-        <a href="{safe_button_url}" style="margin:0 auto;padding:0px;border:0px;text-align:center;text-decoration:none;display:inline-block;color:rgb(255,255,255);width:50%;" target="_blank">
-            <span style="margin:0px;padding:0px;border:1px solid {safe_button_color};display:flex;background-color:{safe_button_color};border-radius:10px;height:40px;align-items:center;justify-content:center">
-                <span style="margin:0px;padding:0px;border:0px;display:inline-block;line-height:40px;text-align:center;width:100%">{safe_button_text}</span>
-            </span>
-        </a>
-    </div>
+    # REDUCED FONT SIZE AND PADDING
+    return f"""
+    <a href="{button_url}" style="margin:0px;padding:0px;border:0px;text-align:center;text-decoration:none;display:block;color:rgb(255,255,255);font-family:Arial;font-style:inherit;font-weight:inherit;font-size:9px" target="_blank">
+        <span style="margin:0px;padding:2px 5px;border:1px solid {button_color};display:block;background-color:{button_color};border-radius:2px">
+            <div style="margin:0px;padding:0px;border:0px;text-align:center;font-size:12px;color:rgb(255,255,255)">
+                <span style="margin:0px;padding:0px;border:0px;font-size:12px">{button_text}</span>
+            </div>
+        </span>
+    </a>
     """
-    return "".join(line.strip() for line in html.splitlines())
 
 # --- Business Logic ---
 def generate_email_preview_and_template():
@@ -327,50 +321,66 @@ def generate_email_preview_and_template():
         st.session_state.generation_in_progress = False
         return
 
-    agent = SmartEmailAgent(openai_api_key=OPENAI_API_KEY)
+    # ADD LOADING SPINNER FOR EMAIL GENERATION
+    with st.spinner(_t("Generation d'email avec l'IA... Cela peut prendre quelques instants.")):
+        try:
+            agent = SmartEmailAgent(openai_api_key=OPENAI_API_KEY)
 
-    generate_nonpersonalized_greeting = not bool(st.session_state.generic_greeting.strip())
+            generate_nonpersonalized_greeting = not bool(st.session_state.generic_greeting.strip())
 
-    template = agent.generate_email_template(
-        prompt=st.session_state.user_prompt,
-        user_email_context=st.session_state.user_email_context,
-        output_language=st.session_state.language,
-        personalize_emails=st.session_state.personalize_emails,
-        generate_nonpersonalized_greeting=generate_nonpersonalized_greeting
-    )
+            template = agent.generate_email_template(
+                prompt=st.session_state.user_prompt,
+                user_email_context=st.session_state.user_email_context,
+                output_language=st.session_state.language,
+                personalize_emails=st.session_state.personalize_emails,
+                generate_nonpersonalized_greeting=generate_nonpersonalized_greeting
+            )
 
-    st.session_state.template_subject = template['subject']
-    st.session_state.template_body = template['body']
-    st.session_state.editable_subject = template['subject']
-    st.session_state.editable_body = template['body']
+            st.session_state.template_subject = template['subject']
+            st.session_state.template_body = template['body']
+            st.session_state.editable_subject = template['subject']
+            st.session_state.editable_body = template['body']
 
-    # Apply greeting manually only if not personalizing AND we did NOT ask the agent to add one
-    if not st.session_state.personalize_emails and not generate_nonpersonalized_greeting:
-        actual_greeting = st.session_state.generic_greeting if st.session_state.generic_greeting else _t("Valued Customer")
-        st.session_state.editable_body = _add_greeting_to_body(
-            st.session_state.editable_body,
-            actual_greeting,
-            st.session_state.language
-        )
-        st.session_state.template_body = st.session_state.editable_body
+            # Apply greeting manually only if not personalizing AND we did NOT ask the agent to add one
+            if not st.session_state.personalize_emails and not generate_nonpersonalized_greeting:
+                actual_greeting = st.session_state.generic_greeting if st.session_state.generic_greeting else _t("Valued Customer")
+                st.session_state.editable_body = _add_greeting_to_body(
+                    st.session_state.editable_body,
+                    actual_greeting,
+                    st.session_state.language
+                )
+                st.session_state.template_body = st.session_state.editable_body
 
-    st.session_state.generation_in_progress = False
-    st.session_state.email_generated = True
-    st.session_state.page = 'preview'
-    st.rerun()
+            st.session_state.generation_in_progress = False
+            st.session_state.email_generated = True
+            st.session_state.page = 'preview'
+            
+            # Show success message
+            st.success(_t("Email template generated successfully!"))
+            st.rerun()
+            
+        except Exception as e:
+            st.session_state.generation_in_progress = False
+            st.error(_t("Failed to generate email template: ") + str(e))
+
 
 # NEW: Function to refresh events for a specific message ID
 def refresh_message_events(message_id, message_index):
-    st.session_state.email_sending_status.append(f"Refreshing events for message ID: {message_id}...")
-    try:
-        new_events_data = get_email_events([message_id])
-        if message_id in new_events_data:
-            st.session_state.message_details[message_index]['events'] = new_events_data[message_id]
-            st.session_state.email_sending_status.append(f"✅ Events refreshed for {message_id}.")
-        else:
-            st.session_state.email_sending_status.append(f"⚠️ Could not find events for {message_id}.")
-    except Exception as e:
-        st.session_state.email_sending_status.append(f"❌ Error refreshing events for {message_id}: {e}")
+    # ADD LOADING SPINNER FOR EVENT REFRESH
+    with st.spinner(_t("Refreshing email events...")):
+        st.session_state.email_sending_status.append(f"Refreshing events for message ID: {message_id}...")
+        try:
+            new_events_data = get_email_events([message_id])
+            if message_id in new_events_data:
+                st.session_state.message_details[message_index]['events'] = new_events_data[message_id]
+                st.session_state.email_sending_status.append(f"âœ… Events refreshed for {message_id}.")
+                st.success(_t("Events refreshed successfully!"))
+            else:
+                st.session_state.email_sending_status.append(f"âš ï¸ Could not find events for {message_id}.")
+                st.warning(_t("No events found for this message."))
+        except Exception as e:
+            st.session_state.email_sending_status.append(f"âŒ Error refreshing events for {message_id}: {e}")
+            st.error(_t("Error refreshing events: ") + str(e))
     st.rerun()
 
 
