@@ -36,4 +36,4 @@ jobs:
       # A simple test to check for dependency and syntax issues.
       - name: Check app integrity
         run: |
-          python -c "import streamlit; import pandas; import openai; import streamlit_authenticator; import brevo; from streamlit_app import init_state; from config import APP_CREDENTIALS"
+          python -c "import streamlit; import pandas; import openai; import streamlit_authenticator; import brevo_python; from streamlit_app import init_state; from config import APP_CREDENTIALS"
