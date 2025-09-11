@@ -26,16 +26,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      #  Add this new step to create the secrets.toml file
+      # NEW STEP: Create the secrets.toml file with the correct structure
       - name: Create secrets.toml file
         run: |
           mkdir -p .streamlit
-          echo "${{ secrets.STREAMLIT_SECRETS }}" > .streamlit/secrets.toml
-        env:
-          # This line makes the secret available as an environment variable
-          STREAMLIT_SECRETS: ${{ secrets.STREAMLIT_SECRETS }}
+          cat <<EOF > .streamlit/secrets.toml
+          [credentials]
+          usernames = {
+              "test_user" = {name = "Test User", password = "test_password"}
+          }
+          [cookie]
+          name = "some_cookie_name"
+          key = "some_cookie_key"
+          expiry_days = 30
+          EOF
 
-      # A simple test to check for dependency and syntax issues.
-      - name: Check app integrity
+      # NEW STEP: Test the Streamlit app
+      - name: Test Streamlit app
         run: |
-          python -c "import streamlit; import pandas; import openai; import streamlit_authenticator; import brevo_python; from streamlit_app import init_state; from config import APP_CREDENTIALS"
+          streamlit run streamlit_app.py --server.runOnSave false --browser.gatherUsageStats false &
+          sleep 5 # Give the server time to start
+          curl http://localhost:8501
