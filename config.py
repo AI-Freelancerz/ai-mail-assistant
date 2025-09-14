@@ -29,4 +29,4 @@ ANDROID_SMS_GATEWAY_PASSWORD = APP_CREDENTIALS.get("ANDROID_SMS_GATEWAY_PASSWORD
 
 # --- LOGGING CONFIGURATION ---
 # Path for logging failed email attempts. This is not a secret.
-FAILED_EMAILS_LOG_PATH = "failed_emails.log" # This path will be created in your app's root directory on Streamlit Cloud
+FAILED_EMAILS_LOG_PATH = "logs/failed_emails.log" # This path will be created in your app's root directory on Streamlit Cloud

@@ -97,19 +97,20 @@ def send_email_message(sender_email, sender_name, to_email, to_name, subject, bo
         return {'status': 'error', 'message': err}
 
 
-def send_bulk_email_messages(sender_email, sender_name, messages, attachments=None):
-    """Send multiple transactional emails in one batch call."""
+def send_bulk_email_messages(sender_email, sender_name, messages, attachments=None, chunk_size=1000):
+    """
+    Send multiple transactional emails in one or more batch calls.
+    Automatically splits the message list into chunks to respect API limits.
+    """
     if not messages:
         return {'status': 'error', 'message': 'No messages provided'}
 
-    if len(messages) > 2000:
-        return {'status': 'error', 'message': 'Brevo limit is 2000 recipients per batch'}
-
-    configuration = sib_api_v3_sdk.Configuration()
-    configuration.api_key['api-key'] = BREVO_API_KEY
-    api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
-
-    # Process attachments once
+    total_messages = len(messages)
+    successful_sends = 0
+    failed_sends = 0
+    all_message_ids = []
+    
+    # Process attachments once for all chunks
     attachment_list = []
     if attachments:
         for path in attachments:
@@ -119,48 +120,62 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
                 encoded = base64.b64encode(data).decode('utf-8')
                 attachment_list.append({'content': encoded, 'name': os.path.basename(path)})
             except Exception as e:
+                # Log the attachment error but continue with the send
+                _log_failed_email_to_file(sender_email, "N/A", "Attachment Error", "", str(e))
                 pass
 
-    # Build versions with proper SDK models
-    versions = _build_message_versions(messages)
-
-    # Use first message as global default
+    # Use first message as global default for sender, subject, and body
     first = messages[0]
     global_html = first.get('body', '').replace('\n', '<br>')
     global_subject = first.get('subject', '')
-
-    batch_args = {
-        'sender': {'email': sender_email, 'name': sender_name},
-        'subject': global_subject,
-        'html_content': global_html,
-        'message_versions': versions
-    }
-    if attachment_list:
-        batch_args['attachment'] = attachment_list
-
-    batch_model = sib_api_v3_sdk.SendSmtpEmail(**batch_args)
-
-    try:
-        response = api.send_transac_email(batch_model)
-        # Extract message IDs from the response
-        message_ids = []
-        if hasattr(response, 'message_ids') and response.message_ids:
-            message_ids = response.message_ids
-        elif hasattr(response, 'message_id') and response.message_id:
-            message_ids = [response.message_id]
+    
+    # Chunk the messages and process each chunk
+    for i in range(0, total_messages, chunk_size):
+        chunk = messages[i:i + chunk_size]
         
-        return {
-            'status': 'success', 
-            'response': response,
-            'message_ids': message_ids,
-            'total_sent': len(message_ids)
+        configuration = sib_api_v3_sdk.Configuration()
+        configuration.api_key['api-key'] = BREVO_API_KEY
+        api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+        
+        # Build versions for the current chunk
+        versions = _build_message_versions(chunk)
+        
+        # Build a dictionary with only the parameters that are not None
+        batch_args = {
+            'sender': {'email': sender_email, 'name': sender_name},
+            'subject': global_subject,
+            'html_content': global_html,
+            'message_versions': versions,
         }
-    except ApiException as e:
-        err = e.body if hasattr(e, 'body') else str(e)
-        for msg in messages:
-            _log_failed_email_to_file(sender_email, msg['to_email'], msg.get('subject', ''), msg.get('body', ''), err)
-        return {'status': 'error', 'message': err}
+        
+        # ONLY add the attachment parameter if there are attachments to send
+        if attachment_list:
+            batch_args['attachment'] = attachment_list
 
+        try:
+            response = api.send_transac_email(sib_api_v3_sdk.SendSmtpEmail(**batch_args))
+            response_dict = response.to_dict()
+            
+            message_ids_from_response = response_dict.get('messageIds', [])
+            all_message_ids.extend(message_ids_from_response)
+            successful_sends += len(message_ids_from_response)
+            
+        except ApiException as e:
+            err = e.body if hasattr(e, 'body') else str(e)
+            _log_failed_email_to_file(sender_email, "Bulk Send", "Batch Send Failed", f"Batch from {i} to {i+len(chunk)}", err)
+            failed_sends += len(chunk)
+            
+            return {'status': 'error', 'message': f"Batch send failed at index {i}. Error: {err}"}
+
+    # At the end, return a consolidated response
+    return {
+        'status': 'success',
+        'message': f"All batches processed. {successful_sends} emails sent successfully.",
+        'total_sent': successful_sends,
+        'message_ids': all_message_ids,
+        'failed_count': failed_sends,
+    }
+    
 def get_email_events(message_ids: list):
     """
     Retrieves the event history for a list of message IDs from Brevo.
