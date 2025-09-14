@@ -97,10 +97,20 @@ def send_email_message(sender_email, sender_name, to_email, to_name, subject, bo
         return {'status': 'error', 'message': err}
 
 
-def send_bulk_email_messages(sender_email, sender_name, messages, attachments=None, chunk_size=1000):
+def send_bulk_email_messages(sender_email, sender_name, messages, attachments=None, chunk_size=2000):
     """
     Send multiple transactional emails in one or more batch calls.
     Automatically splits the message list into chunks to respect API limits.
+    
+    Args:
+        sender_email: Sender's email address
+        sender_name: Sender's display name  
+        messages: List of message dictionaries
+        attachments: Optional list of attachment file paths
+        chunk_size: Maximum messages per API call (default 2000, Brevo's max)
+    
+    Returns:
+        Dictionary with status, message_ids, total_sent, and failed_count
     """
     if not messages:
         return {'status': 'error', 'message': 'No messages provided'}
@@ -180,6 +190,11 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
             
             # Don't return immediately - continue processing other chunks
             continue
+        
+        # Rate limiting: Add delay between chunks to respect API limits
+        # Only add delay if there are more chunks to process
+        if i + chunk_size < total_messages:
+            time.sleep(1.0)  # 1 second delay between chunks
 
     # At the end, return a consolidated response
     return {
