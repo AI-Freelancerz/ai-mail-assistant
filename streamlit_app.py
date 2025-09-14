@@ -471,6 +471,7 @@ def send_all_emails():
                         for ph in ["{{Email}}", "{{Courriel}}"]:
                             subj = subj.replace(ph, email)
                             body = body.replace(ph, email)
+
                     else:
                         # strip any leftover placeholders
                         for ph in ["{{Name}}","{{Nom}}","{{Email}}","{{Courriel}}"]:
@@ -499,7 +500,7 @@ def send_all_emails():
                         "body": body_with_buttons
                     })
 
-                # Send all at once
+                 # Send all at once
                 result = send_bulk_email_messages(
                     sender_email=SENDER_EMAIL,
                     sender_name=SENDER_EMAIL.split('@')[0].replace('.', ' ').title(),
@@ -507,80 +508,94 @@ def send_all_emails():
                     attachments=temp_attachment_paths if temp_attachment_paths else None
                 )
 
-            # Build status & summary
-            status = []
-            result_status = result.get("status")
-            result_message = result.get("message", "")
-            
-            if result_status == "success":
-                message_ids = result.get("message_ids", [])
-                total_sent = result.get("total_sent", len(messages))
-                success = total_sent
-                fail = total_contacts - success
-                
-                # Add detailed status information
-                status.append(_t("✅ Bulk send completed successfully!"))
-                status.append(_t("📧 Total emails sent: ") + str(success))
-                status.append(_t("📊 Success rate: ") + f"{success}/{total_contacts} ({(success/total_contacts*100):.1f}%)")
-                  
-                # NEW: Populate st.session_state.message_details with structured data
-                st.session_state.message_details = []
-                if message_ids:
-                    # Fetch initial events (if any) for all messages
-                    with st.spinner(_t("Fetching email delivery status...")):
-                        email_events_initial = get_email_events(message_ids)
-                    for i, msg_id in enumerate(message_ids, 1):
-                        recipient_email = messages[i-1]['to_email'] if i <= len(messages) else f"Recipient {i}"
-                        st.session_state.message_details.append({
-                            'recipient': recipient_email,
-                            'message_id': msg_id,
-                            'events': email_events_initial.get(msg_id, []) # Store initial events
-                        })
-                
-                if fail > 0:
-                    status.append(f"⚠️¸ {fail} emails failed to send")
-                    
-            elif result_status == "partial_success":
-                # Extract success count from message
-                import re
-                success_match = re.search(r'(\d+) emails sent successfully', result_message)
-                success = int(success_match.group(1)) if success_match else 0
-                fail = total_contacts - success
-                status.append(f"⚠️¸ Partial success: {result_message}")
-                # For partial success, we might not have message_ids for all,
-                # so we'll just log the overall status.
-                st.session_state.message_details = [] # Clear any previous details
-            else:
-                success = 0
-                fail = total_contacts
-                status.append(f"❌ Bulk send failed: {result_message}")
-                st.session_state.message_details = [] # Clear any previous details
+                # Build status & summary
+                status = []
+                result_status = result.get("status")
+                result_message = result.get("message", "")
 
-            st.session_state.email_sending_status = status
-            st.session_state.sending_summary = {
-                'total_contacts': total_contacts,
-                'successful': success,
-                'failed': fail
-            }
-            # Store detailed response data for the results page
-            st.session_state.detailed_response = result
-            st.session_state.page = 'results'
-            st.session_state.sending_in_progress = False
-            
-            # Show completion message
-            if success == total_contacts:
-                st.success(_t("All emails sent successfully!"))
-            elif success > 0:
-                st.warning(_t("Emails sent with some issues. Check the results page for details."))
-            else:
-                st.error(_t("Email sending failed. Please check the configuration and try again."))
-                
-            st.rerun()
-            
+                if result_status == "success":
+                    message_ids = result.get("message_ids", [])
+                    success = result.get("total_sent", 0) # Use the count from the email tool
+                    # Correctly calculate failed count: total messages *attempted* to be sent minus the successful ones
+                    fail = len(messages) - success
+
+                    # Add detailed status information
+                    status.append(_t("✅ Bulk send completed successfully!"))
+                    status.append(_t("📧 Total emails sent: ") + str(success))
+                    status.append(_t("📊 Success rate: ") + f"{success}/{len(messages)} ({(success/len(messages)*100):.1f}%)")
+
+                    # NEW: Populate st.session_state.message_details with structured data
+                    st.session_state.message_details = []
+                    if message_ids:
+                        # Fetch initial events (if any) for all messages
+                        with st.spinner(_t("Fetching email delivery status...")):
+                            # Only fetch events for real message IDs (not unknown_id placeholders)
+                            real_message_ids = [mid for mid in message_ids if not mid.startswith('unknown_id_')]
+                            email_events_initial = get_email_events(real_message_ids) if real_message_ids else {}
+
+                        for i, msg_id in enumerate(message_ids):
+                            recipient_email = messages[i]['to_email'] if i < len(messages) else f"Recipient {i+1}"
+                            
+                            # Handle unknown message IDs
+                            if msg_id.startswith('unknown_id_'):
+                                events = [{'event': 'sent', 'reason': 'Email sent successfully (tracking ID unavailable)', 'date': 'N/A'}]
+                            else:
+                                events = email_events_initial.get(msg_id, [])
+                            
+                            st.session_state.message_details.append({
+                                'recipient': recipient_email,
+                                'message_id': msg_id,
+                                'events': events
+                            })
+
+                    if fail > 0:
+                        status.append(f"⚠️ {fail} emails from your list were not sent due to invalid addresses or were skipped.")
+
+                elif result_status == "partial_success":
+                    # Extract success count from message
+                    import re
+                    success_match = re.search(r'(\d+) emails sent successfully', result_message)
+                    success = int(success_match.group(1)) if success_match else 0
+                    fail = len(messages) - success
+                    status.append(f"⚠️ Partial success: {result_message}")
+
+                    # For partial success, we might not have message_ids for all,
+                    # so we'll just log the overall status.
+                    st.session_state.message_details = [] # Clear any previous details
+
+                else:
+                    success = 0
+                    fail = len(messages) # If the whole batch failed, all attempted messages failed.
+                    status.append(f"❌ Bulk send failed: {result_message}")
+                    st.session_state.message_details = [] # Clear any previous details
+
+                st.session_state.email_sending_status = status
+                st.session_state.sending_summary = {
+                    'total_contacts': total_contacts,
+                    'successful': success,
+                    'failed': fail
+                }
+
+                # Store detailed response data for the results page
+                st.session_state.detailed_response = result
+                st.session_state.page = 'results'
+                st.session_state.sending_in_progress = False
+
+                # Show completion message
+                if success == len(messages):
+                    st.success(_t("All emails sent successfully!"))
+                elif success > 0:
+                    st.warning(_t("Emails sent with some issues. Check the results page for details."))
+                else:
+                    st.error(_t("Email sending failed. Please check the configuration and try again."))
+                st.rerun()
+
         except Exception as e:
             st.session_state.sending_in_progress = False
-            st.error(_t("Error during email sending: ") + str(e))
-
+            st.error(_t("An unexpected error occurred: ") + str(e))
+            st.rerun()
+            
+            
 # --- Page: Generate ---
 def page_generate():
     st.subheader(_t("1. Generation"))

@@ -1,0 +1,9 @@
+Timestamp: 2025-09-14 14:38:49
+Sender: asso.migdal@migdal-france.org
+Recipient: Bulk Send
+Subject: Batch Send Failed
+Error: {"code":"missing_parameter","message":"attachment is missing"}
+
+Body Snippet: Batch from 0 to 2...
+--------------------------------------------------
+
