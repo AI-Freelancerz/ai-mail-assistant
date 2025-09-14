@@ -315,7 +315,7 @@ class SmartEmailMessengerApp(ctk.CTk):
         sender_email_configured = SENDER_EMAIL
         # Derive sender_name from SENDER_EMAIL (e.g., "JohnDoe" from "johndoe@example.com")
         sender_name = sender_email_configured.split('@')[0].replace('.', ' ').title() if sender_email_configured else "Sender"
-
+        
         for i, recipient in enumerate(self.contacts):
             recipient_email = recipient.get('email')
             recipient_name = recipient.get('name', 'there')
@@ -377,6 +377,7 @@ class SmartEmailMessengerApp(ctk.CTk):
         
         self.after(0, lambda: messagebox.showinfo("Sending Complete", 
                                                   f"Finished sending emails.\nSuccessful: {total_success}\nFailed/Skipped: {total_failed}\n\nCheck the Activity Log for details."))
+
 
 
 if __name__ == "__main__":
