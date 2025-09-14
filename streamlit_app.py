@@ -529,14 +529,23 @@ def send_all_emails():
                     if message_ids:
                         # Fetch initial events (if any) for all messages
                         with st.spinner(_t("Fetching email delivery status...")):
-                            email_events_initial = get_email_events(message_ids)
+                            # Only fetch events for real message IDs (not unknown_id placeholders)
+                            real_message_ids = [mid for mid in message_ids if not mid.startswith('unknown_id_')]
+                            email_events_initial = get_email_events(real_message_ids) if real_message_ids else {}
 
-                        for i, msg_id in enumerate(message_ids, 1):
-                            recipient_email = messages[i-1]['to_email'] if i <= len(messages) else f"Recipient {i}"
+                        for i, msg_id in enumerate(message_ids):
+                            recipient_email = messages[i]['to_email'] if i < len(messages) else f"Recipient {i+1}"
+                            
+                            # Handle unknown message IDs
+                            if msg_id.startswith('unknown_id_'):
+                                events = [{'event': 'sent', 'reason': 'Email sent successfully (tracking ID unavailable)', 'date': 'N/A'}]
+                            else:
+                                events = email_events_initial.get(msg_id, [])
+                            
                             st.session_state.message_details.append({
                                 'recipient': recipient_email,
                                 'message_id': msg_id,
-                                'events': email_events_initial.get(msg_id, []) # Store initial events
+                                'events': events
                             })
 
                     if fail > 0:

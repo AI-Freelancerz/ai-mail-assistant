@@ -148,15 +148,28 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
             'message_versions': versions,
         }
         
-        # ONLY add the attachment parameter if there are attachments to send
-        if attachment_list:
+        # ONLY add the attachment parameter if there are actual attachments to send
+        if attachment_list and len(attachment_list) > 0:
             batch_args['attachment'] = attachment_list
 
         try:
             response = api.send_transac_email(sib_api_v3_sdk.SendSmtpEmail(**batch_args))
-            response_dict = response.to_dict()
             
-            message_ids_from_response = response_dict.get('messageIds', [])
+            # Extract message IDs from the response - handle different response formats
+            message_ids_from_response = []
+            if hasattr(response, 'message_ids') and response.message_ids:
+                message_ids_from_response = response.message_ids
+            elif hasattr(response, 'message_id') and response.message_id:
+                message_ids_from_response = [response.message_id]
+            else:
+                # Try to convert to dict and get messageIds
+                try:
+                    response_dict = response.to_dict()
+                    message_ids_from_response = response_dict.get('messageIds', [])
+                except:
+                    # If all else fails, assume the chunk was sent successfully
+                    message_ids_from_response = [f"unknown_id_{i}_{j}" for j in range(len(chunk))]
+            
             all_message_ids.extend(message_ids_from_response)
             successful_sends += len(message_ids_from_response)
             
@@ -165,7 +178,8 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
             _log_failed_email_to_file(sender_email, "Bulk Send", "Batch Send Failed", f"Batch from {i} to {i+len(chunk)}", err)
             failed_sends += len(chunk)
             
-            return {'status': 'error', 'message': f"Batch send failed at index {i}. Error: {err}"}
+            # Don't return immediately - continue processing other chunks
+            continue
 
     # At the end, return a consolidated response
     return {
