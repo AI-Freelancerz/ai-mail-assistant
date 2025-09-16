@@ -441,7 +441,7 @@ def send_all_emails():
                 if not st.session_state.add_custom_button:
                     # If no custom button, we need to open the div here
                     full_button_html += f"""<div style="text-align: center;">"""
-
+                
                 full_button_html += f"""
                     <p style="margin: 5px 0; font-size: 14px;">{donate_text_above}</p>
                     <br>{donate_button_html}
@@ -521,8 +521,8 @@ def send_all_emails():
 
                     # Add detailed status information
                     status.append(_t("✅ Bulk send completed successfully!"))
-                    status.append(_t("📧 Total emails sent: ") + str(success))
-                    status.append(_t("📊 Success rate: ") + f"{success}/{len(messages)} ({(success/len(messages)*100):.1f}%)")
+                    status.append(_t("📧 Total emails sent: {count}", count=str(success)))
+                    status.append(_t("📊 Success rate: {success}/{total} ({percentage:.1f}%)", success=success, total=len(messages), percentage=(success/len(messages)*100)))
 
                     # NEW: Populate st.session_state.message_details with structured data
                     st.session_state.message_details = []
@@ -632,7 +632,19 @@ def page_generate():
         if issues:
             st.warning(_t("WARNING: Some contacts had issues (e.g., missing/invalid/duplicate emails). They will be skipped."))
             for issue in issues:
-                st.info(f"  - {issue}")
+                #st.info(f"  - {issue}")
+                # Translate the issue message
+                if "Row" in issue:
+                    try:
+                        row_num = int(issue.split("Row ")[1].split(":")[0])
+                        name = issue.split("'")[1]
+                        email = issue.split("(Email: '")[1].split("')")[0]
+                        st.info(_t("Row {row_num}: Invalid or missing email for '{name}' (Email: '{email}').", row_num=row_num, name=name, email=email))
+                    except Exception as e:
+                        st.error(f"Error translating issue: {e}")
+                        st.info(issue)  # Fallback to original if translation fails
+                else:
+                    st.info(issue)
         
         if contacts:
             st.success(_t("Successfully loaded {count} valid contacts.", count=len(contacts)))
@@ -706,7 +718,7 @@ def page_generate():
                 st.session_state.custom_button_text_before = st.text_input(
                     _t("Text Before Button"),
                     value=st.session_state.custom_button_text_before,
-                    placeholder=_t("e.g., 'Click the button below to learn more'"),
+                    placeholder=_t("e.g. 'click the button below to learn more'"),
                     key="custom_button_text_before_input"
                 )
             with col2:
