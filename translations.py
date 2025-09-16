@@ -196,7 +196,8 @@ TRANSLATIONS = {
         "Preparing and sending emails... This may take several minutes for large lists.": "Préparation et envoi des e-mails... Cela peut prendre plusieurs minutes pour les grandes listes.",
         "Generation & Setup": "Génération et configuration",
         "Preview & Send": "Aperçu et envoi",
-        "Results": "Résultats"
+        "Results": "Résultats",
+        "Generating email with AI. This may take a few moments...": "Génération d'email avec l'IA. Cela peut prendre quelques instants..."
     }
 }
 
