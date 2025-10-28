@@ -147,13 +147,14 @@ def render() -> None:
         selected_mode = st.radio(
             _t("Select sending mode:"),
             options=["production", "test"],
+            index=0 if st.session_state.sms_sending_mode == "production" else 1,
             format_func=lambda x: _t("Production Mode") if x == "production" else _t("Test Mode"),
             key="sms_mode_radio",
             help=_t("Production mode deduplicates phone numbers. Test mode sends to all entries including duplicates.")
         )
         st.session_state.sms_sending_mode = selected_mode
     with mode_col2:
-        if st.session_state.sms_sending_mode == "production":
+        if selected_mode == "production":
             st.info(_t("📱 Production Mode: Each unique phone number receives only one message, even if it appears multiple times in the Excel file."))
         else:
             st.info(_t("🧪 Test Mode: Messages are sent to every row in the Excel file, including duplicate phone numbers. Use this for testing large-scale sending with the same destination number."))
@@ -163,14 +164,15 @@ def render() -> None:
     all_contacts = st.session_state.contacts
     
     # Apply deduplication based on mode
-    if st.session_state.sms_sending_mode == "production":
+    if selected_mode == "production":
         # Deduplicate by phone number (keep first occurrence)
         seen_numbers = set()
         contacts_to_display = []
         for contact in all_contacts:
             phone = contact.get("phone_number")
             # Skip contacts with empty or None phone numbers
-            if phone and phone.strip():
+            # Add type check to handle non-string types
+            if phone and isinstance(phone, str) and phone.strip():
                 if phone not in seen_numbers:
                     seen_numbers.add(phone)
                     contacts_to_display.append(contact)
