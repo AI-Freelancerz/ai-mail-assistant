@@ -86,6 +86,7 @@ def render() -> None:
     st.session_state.setdefault("contact_issues", []) # List of strings from data_handler_phone_numbers
     st.session_state.setdefault("uploaded_file_name", None) # To track if the file has changed by name
     st.session_state.setdefault("uploaded_file_path", None) # To store path for access
+    st.session_state.setdefault("sms_sending_mode", "production") # production or test mode
 
     st.markdown("---")
     st.header(_t("Upload Contacts"))
@@ -137,9 +138,44 @@ def render() -> None:
         st.info(_t("Please upload an Excel file to get started."))
 
 
+    # --- Sending Mode Selection ---
+    st.markdown("---")
+    st.header(_t("Sending Mode"))
+    
+    mode_col1, mode_col2 = st.columns(2)
+    with mode_col1:
+        st.session_state.sms_sending_mode = st.radio(
+            _t("Select sending mode:"),
+            options=["production", "test"],
+            format_func=lambda x: _t("Production Mode") if x == "production" else _t("Test Mode"),
+            key="sms_mode_radio",
+            help=_t("Production mode deduplicates phone numbers. Test mode sends to all entries including duplicates.")
+        )
+    with mode_col2:
+        if st.session_state.sms_sending_mode == "production":
+            st.info(_t("📱 Production Mode: Each unique phone number receives only one message, even if it appears multiple times in the Excel file."))
+        else:
+            st.info(_t("🧪 Test Mode: Messages are sent to every row in the Excel file, including duplicate phone numbers. Use this for testing large-scale sending with the same destination number."))
+    
     # Derive recipients table from st.session_state.contacts
     # The data handler already returns contacts in the desired format: [{"name": "...", "phone_number": "..."}]
-    recipients_df = pd.DataFrame(st.session_state.contacts)
+    all_contacts = st.session_state.contacts
+    
+    # Apply deduplication based on mode
+    if st.session_state.sms_sending_mode == "production":
+        # Deduplicate by phone number (keep first occurrence)
+        seen_numbers = set()
+        contacts_to_display = []
+        for contact in all_contacts:
+            phone = contact.get("phone_number")
+            if phone not in seen_numbers:
+                seen_numbers.add(phone)
+                contacts_to_display.append(contact)
+    else:
+        # Test mode: keep all contacts including duplicates
+        contacts_to_display = all_contacts
+    
+    recipients_df = pd.DataFrame(contacts_to_display)
     if not recipients_df.empty:
         recipients_df = recipients_df.rename(columns={"phone_number": "phone"}) # Rename for UI consistency
 
