@@ -86,8 +86,9 @@ def load_contacts_from_excel(file_path):
 
     for index, row in df.iterrows():
         # Get email using the identified column, defaulting to empty string if not found or NaN
-        # *** MODIFIED LINE HERE ***
-        email = str(row[email_col_name]).strip().lower().replace(" ", "") if pd.notna(row[email_col_name]) else ''
+        # Normalize: strip whitespace, lowercase, remove internal spaces
+        raw_email = str(row[email_col_name]) if pd.notna(row[email_col_name]) else ''
+        email = raw_email.strip().lower().replace(" ", "")
         
         # Get name using the identified column, defaulting to "Contact X" if not found or NaN
         if name_col_name and pd.notna(row.get(name_col_name)):
@@ -95,7 +96,7 @@ def load_contacts_from_excel(file_path):
         else:
             name = f"Contact {index + 1}" # Fallback if no name column or name is missing
 
-        # Enhanced email validation
+        # Enhanced email validation on normalized email
         if email and _is_valid_email(email):
             contacts.append({"name": name, "email": email})
         else:

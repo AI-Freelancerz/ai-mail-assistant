@@ -263,11 +263,21 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
     
     Returns:
         Dictionary with:
-            - status: 'success' or 'partial' or 'error'
-            - message: Summary message
-            - message_ids: List of successfully sent message IDs
-            - total_sent: Number of successfully sent emails
-            - failed_count: Number of failed emails
+            - status: 'success' | 'partial' | 'error'
+                * 'success': All emails sent successfully
+                * 'partial': Some emails sent, some failed
+                * 'error': All emails failed
+            - message: Summary message string
+            - message_ids: List of successfully sent message IDs (strings)
+            - total_sent: Number of successfully sent emails (int)
+            - failed_count: Number of failed emails (int)
+            - failed_emails: List of failed email addresses (strings)
+            - duplicates_removed: Number of duplicate emails removed (int)
+    
+    Note:
+        This function is called by streamlit_app.py with chunk_size=500 and progress_callback.
+        Ensure status values match what UI expects: 'success', 'partial', 'error'.
+        Message IDs align with messages list order (accounting for failed sends).
             - failed_emails: List of failed email addresses
     """
     logging.info(f"[EMAIL_TOOL] Starting bulk email send for {len(messages)} messages")

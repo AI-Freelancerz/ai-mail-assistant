@@ -435,6 +435,9 @@ def send_all_emails():
     st.session_state.sending_in_progress = True
     total_contacts = len(st.session_state.contacts)
     logging.info(f"Total contacts to process: {total_contacts}")
+    
+    # Clear previous progress messages from any prior sends
+    st.session_state.email_sending_progress = []
 
     # ADD LOADING SPINNER FOR EMAIL SENDING
     with st.spinner(_t("Preparing and sending emails... This may take several minutes for large lists.")):

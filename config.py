@@ -32,24 +32,39 @@ ANDROID_SMS_GATEWAY_PASSWORD = APP_CREDENTIALS.get("ANDROID_SMS_GATEWAY_PASSWORD
 # Path for logging failed email attempts. This is not a secret.
 FAILED_EMAILS_LOG_PATH = "logs/failed_emails.log" # This path will be created in your app's root directory on Streamlit Cloud
 
-# --- EMAIL SENDING CONFIGURATION ---
+# === EMAIL SENDING CONFIGURATION ===
 # These parameters control the reliability and performance of email sending
 # Can be overridden in Streamlit secrets for production tuning
 
+# Helper functions for safe type conversion with fallback defaults
+def _safe_int(value, default):
+    """Safely convert to int with fallback to default on error"""
+    try:
+        return int(value) if value is not None else default
+    except (ValueError, TypeError):
+        return default
+
+def _safe_float(value, default):
+    """Safely convert to float with fallback to default on error"""
+    try:
+        return float(value) if value is not None else default
+    except (ValueError, TypeError):
+        return default
+
 # Retry configuration
-EMAIL_MAX_RETRIES = int(APP_CREDENTIALS.get("EMAIL_MAX_RETRIES", 3))
-EMAIL_INITIAL_RETRY_DELAY = float(APP_CREDENTIALS.get("EMAIL_INITIAL_RETRY_DELAY", 2.0))  # seconds
-EMAIL_MAX_RETRY_DELAY = float(APP_CREDENTIALS.get("EMAIL_MAX_RETRY_DELAY", 60.0))  # seconds
+EMAIL_MAX_RETRIES = _safe_int(APP_CREDENTIALS.get("EMAIL_MAX_RETRIES"), 3)
+EMAIL_INITIAL_RETRY_DELAY = _safe_float(APP_CREDENTIALS.get("EMAIL_INITIAL_RETRY_DELAY"), 2.0)  # seconds
+EMAIL_MAX_RETRY_DELAY = _safe_float(APP_CREDENTIALS.get("EMAIL_MAX_RETRY_DELAY"), 60.0)  # seconds
 
 # Rate limiting configuration
-EMAIL_RATE_LIMIT_DELAY = float(APP_CREDENTIALS.get("EMAIL_RATE_LIMIT_DELAY", 0.1))  # seconds between API calls
-EMAIL_CHUNK_DELAY = float(APP_CREDENTIALS.get("EMAIL_CHUNK_DELAY", 1.0))  # seconds between chunks
+EMAIL_RATE_LIMIT_DELAY = _safe_float(APP_CREDENTIALS.get("EMAIL_RATE_LIMIT_DELAY"), 0.1)  # seconds between API calls
+EMAIL_CHUNK_DELAY = _safe_float(APP_CREDENTIALS.get("EMAIL_CHUNK_DELAY"), 1.0)  # seconds between chunks
 
 # Batch size configuration
 # Conservative default of 500 (Brevo allows up to 2000)
 # Lower values = more reliable, better error isolation, slower overall
 # Higher values = faster, but one error affects more emails
-EMAIL_DEFAULT_CHUNK_SIZE = int(APP_CREDENTIALS.get("EMAIL_DEFAULT_CHUNK_SIZE", 500))
+EMAIL_DEFAULT_CHUNK_SIZE = _safe_int(APP_CREDENTIALS.get("EMAIL_DEFAULT_CHUNK_SIZE"), 500)
 
 # Attachment configuration
-EMAIL_MAX_ATTACHMENT_SIZE_MB = int(APP_CREDENTIALS.get("EMAIL_MAX_ATTACHMENT_SIZE_MB", 10))  # MB per attachment
+EMAIL_MAX_ATTACHMENT_SIZE_MB = _safe_int(APP_CREDENTIALS.get("EMAIL_MAX_ATTACHMENT_SIZE_MB"), 10)  # MB per attachment
