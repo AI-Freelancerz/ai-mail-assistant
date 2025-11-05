@@ -1213,7 +1213,21 @@ def page_results():
 
 # --- Main Navigation ---
 logging.info(f"Rendering page: {st.session_state.page}")
-if st.session_state.page == 'generate':
+
+# Sidebar navigation
+with st.sidebar:
+    st.markdown("## Navigation")
+    if st.button(_t("Email Status Dashboard"), use_container_width=True, key="nav_email_status"):
+        st.session_state.page = 'email_status'
+        st.rerun()
+    if st.button(_t("Generate & Send Emails"), use_container_width=True, key="nav_generate"):
+        st.session_state.page = 'generate'
+        st.rerun()
+
+if st.session_state.page == 'email_status':
+    import email_status_page
+    email_status_page.main()
+elif st.session_state.page == 'generate':
     page_generate()
 elif st.session_state.page == 'preview':
     page_preview()
