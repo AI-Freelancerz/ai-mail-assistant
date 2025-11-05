@@ -509,6 +509,11 @@ def _send_email_chunk_with_retry(sender_email: str, sender_name: str, chunk: Lis
     Returns:
         Dictionary with 'message_ids' list
     """
+    # Safety guard: prevent IndexError if called with empty chunk
+    if not chunk or len(chunk) == 0:
+        logging.warning("[EMAIL_TOOL] _send_email_chunk_with_retry called with empty chunk, skipping")
+        return {'message_ids': []}
+    
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key['api-key'] = BREVO_API_KEY
     api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
@@ -542,13 +547,34 @@ def _send_email_chunk_with_retry(sender_email: str, sender_name: str, chunk: Lis
     time.sleep(RATE_LIMIT_DELAY)
     
     logging.debug(f"[EMAIL_TOOL] Calling Brevo API with sender={sender_email}, {len(versions)} versions")
-    response = api.send_transac_email(sib_api_v3_sdk.SendSmtpEmail(**batch_args))
     
-    # Extract message IDs from response
-    message_ids = _extract_message_ids(response, len(chunk))
-    logging.info(f"[EMAIL_TOOL] Chunk sent successfully, received {len(message_ids)} message IDs")
-    
-    return {'message_ids': message_ids}
+    try:
+        response = api.send_transac_email(sib_api_v3_sdk.SendSmtpEmail(**batch_args))
+        
+        # Extract message IDs from response
+        message_ids = _extract_message_ids(response, len(chunk))
+        logging.info(f"[EMAIL_TOOL] Chunk sent successfully, received {len(message_ids)} message IDs")
+        
+        return {'message_ids': message_ids}
+        
+    except ApiException as e:
+        # Log full context before re-raising for retry logic
+        recipient_list = [msg['to_email'] for msg in chunk]
+        logging.error(
+            f"[EMAIL_TOOL] API call failed for chunk with {len(chunk)} recipients: {recipient_list[:5]}... "
+            f"Status: {getattr(e, 'status', 'unknown')}, Body: {getattr(e, 'body', str(e))}"
+        )
+        raise  # Re-raise to trigger retry logic
+        
+    except Exception as e:
+        # Log unexpected errors with full context
+        recipient_list = [msg['to_email'] for msg in chunk]
+        logging.error(
+            f"[EMAIL_TOOL] Unexpected error sending chunk to {len(chunk)} recipients: {recipient_list[:5]}... "
+            f"Error: {type(e).__name__}: {str(e)}", 
+            exc_info=True
+        )
+        raise  # Re-raise to trigger retry logic
 
 
 def _extract_message_ids(response, expected_count: int) -> List[str]:
