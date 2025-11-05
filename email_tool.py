@@ -319,12 +319,8 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
         logging.info(f"[EMAIL_TOOL] Processing {len(attachments)} attachment(s)")
         attachment_list = _process_attachments(attachments, sender_email)
     
-    # Use first message as global default for sender, subject, and body
-    first = unique_messages[0]
-    global_html = first.get('body', '').replace('\n', '<br>')
-    global_subject = first.get('subject', '')
-    
     # Chunk the messages and process each chunk
+    # Note: Each message has its own subject and body for personalization
     total_chunks = (total_messages + chunk_size - 1) // chunk_size
     
     for chunk_idx in range(0, total_messages, chunk_size):
@@ -338,10 +334,9 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
                             f"Processing chunk {chunk_num}/{total_chunks}...")
         
         try:
-            # Send chunk with retry logic
+            # Send chunk with retry logic (each message has its own subject/body)
             chunk_result = _send_email_chunk_with_retry(
-                sender_email, sender_name, chunk, global_subject, 
-                global_html, attachment_list
+                sender_email, sender_name, chunk, attachment_list
             )
             
             # Process successful sends
@@ -486,17 +481,15 @@ def _process_attachments(attachments: List[str], sender_email: str) -> List[Dict
 
 @retry_with_exponential_backoff(max_retries=MAX_RETRIES)
 def _send_email_chunk_with_retry(sender_email: str, sender_name: str, chunk: List[Dict],
-                                  global_subject: str, global_html: str, 
                                   attachment_list: List[Dict]) -> Dict:
     """
     Send a chunk of emails with retry logic applied.
+    Each message in the chunk has its own personalized subject and body.
     
     Args:
         sender_email: Sender's email address
         sender_name: Sender's display name
-        chunk: List of message dictionaries
-        global_subject: Default subject line
-        global_html: Default HTML body
+        chunk: List of message dictionaries (each with 'subject', 'body', 'to_email', 'to_name')
         attachment_list: List of processed attachments
         
     Returns:
@@ -506,14 +499,14 @@ def _send_email_chunk_with_retry(sender_email: str, sender_name: str, chunk: Lis
     configuration.api_key['api-key'] = BREVO_API_KEY
     api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
     
-    # Build versions for the current chunk
+    # Build versions for the current chunk (each with its own subject/body)
     versions = _build_message_versions(chunk)
     
     # Build batch request
+    # Note: When using message_versions, the global subject/html_content are optional fallbacks
+    # Since we're setting subject/html_content in each version, we don't need global ones
     batch_args = {
         'sender': {'email': sender_email, 'name': sender_name},
-        'subject': global_subject,
-        'html_content': global_html,
         'message_versions': versions,
     }
     
