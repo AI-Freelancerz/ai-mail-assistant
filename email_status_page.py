@@ -307,7 +307,7 @@ def main():
         st.error(_t("❌ Brevo API key not found in configuration"))
         st.warning(_t("Please configure your Brevo API key to use this feature."))
         
-        with st.expander("📖 How to configure"):
+        with st.expander(_t("📖 How to configure")):
             st.markdown("""
             **Option 1: Using Streamlit Secrets (Recommended for production)**
             
@@ -342,13 +342,13 @@ def main():
 
     # Validate API key format
     if not BREVO_API_KEY.startswith("xkeysib-"):
-        st.warning("⚠️ API key format looks unusual. Brevo API keys typically start with 'xkeysib-'")
+        st.warning(_t("⚠️ API key format looks unusual. Brevo API keys typically start with 'xkeysib-'"))
 
     # Initialize client with error handling
     try:
         client = BrevoStatusClient(BREVO_API_KEY)
     except Exception as e:
-        st.error(f"❌ Failed to initialize Brevo client: {str(e)}")
+        st.error(_t("❌ Failed to initialize Brevo client: ") + str(e))
         logger.error(f"Failed to initialize BrevoStatusClient: {str(e)}", exc_info=True)
         st.stop()
 
@@ -612,7 +612,7 @@ def main():
                                 <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
                                         <span style="font-size: 1.25rem;">📧</span>
-                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Sent</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Sent")}</span>
                                     </div>
                                     <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{group["total_sent"]}</div>
                                     <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
@@ -631,7 +631,7 @@ def main():
                                 <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
                                         <span style="font-size: 1.25rem;">✅</span>
-                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Delivered</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Delivered")}</span>
                                     </div>
                                     <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{group["total_delivered"]}</div>
                                     <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
@@ -650,7 +650,7 @@ def main():
                                 <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
                                         <span style="font-size: 1.25rem;">❌</span>
-                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Failed</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Failed")}</span>
                                     </div>
                                     <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{bounced}</div>
                                     <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
@@ -669,13 +669,13 @@ def main():
                                 <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
                                         <span style="font-size: 1.25rem;">📖</span>
-                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Read</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Read")}</span>
                                     </div>
                                     <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{group["total_opened"]}</div>
                                     <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
                                         <div style="height: 100%; width: {opened_pct}%; background: linear-gradient(90deg, #10b981, #059669); border-radius: 2px;"></div>
                                     </div>
-                                    <div style="font-size: 0.75rem; color: #6b7280;">{opened_pct:.0f}% of delivered</div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{opened_pct:.0f}% {_t("of delivered")}</div>
                                 </div>
                                 """,
                                 unsafe_allow_html=True
@@ -688,7 +688,7 @@ def main():
                                 <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
                                         <span style="font-size: 1.25rem;">⏳</span>
-                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Pending</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Pending")}</span>
                                     </div>
                                     <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{pending}</div>
                                     <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
@@ -704,10 +704,10 @@ def main():
                         
                         # === Activity Log Table ===
                         st.markdown('<div class="activity-section">', unsafe_allow_html=True)
-                        st.markdown('<div class="activity-header">📋 Activity Log</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="activity-header">{_t("📋 Activity Log")}</div>', unsafe_allow_html=True)
                         
                         # Add explanation about tracking
-                        with st.expander("ℹ️ Understanding email tracking"):
+                        with st.expander(_t("ℹ️ Understanding email tracking")):
                             st.markdown("""
                             **How email tracking works:**
                             - **Delivered**: Email successfully reached the recipient's inbox
@@ -723,7 +723,7 @@ def main():
                             """)
                         
                         # Add debug toggle
-                        show_debug = st.checkbox("🔍 Show debug info", value=False, key=f"debug_{group_key}")
+                        show_debug = st.checkbox(_t("🔍 Show debug info"), value=False, key=f"debug_{group_key}")
                         
                         # Build activity table data
                         activity_rows = []
@@ -733,7 +733,7 @@ def main():
                             
                             # Check for failures first
                             if r["hardBounces"] > 0 or r["blocked"] > 0:
-                                delivery_status = "❌ Failed"
+                                delivery_status = _t("❌ Failed")
                                 status_priority = 1
                             # Check for successful delivery
                             elif r["delivered"] > 0:
@@ -742,24 +742,24 @@ def main():
                                 has_clicked = r["clicks"] > 0
                                 
                                 if has_clicked and has_opened:
-                                    delivery_status = "🎯 Engaged (Opened & Clicked)"
+                                    delivery_status = _t("🎯 Engaged (Opened & Clicked)")
                                     status_priority = 2
                                 elif has_clicked:
-                                    delivery_status = "🔗 Clicked (without open tracking)"
+                                    delivery_status = _t("🔗 Clicked (without open tracking)")
                                     status_priority = 3
                                 elif has_opened:
-                                    delivery_status = "📖 Opened"
+                                    delivery_status = _t("📖 Opened")
                                     status_priority = 4
                                 else:
-                                    delivery_status = "✅ Delivered"
+                                    delivery_status = _t("✅ Delivered")
                                     status_priority = 5
                             # Check for soft failures
                             elif r["softBounces"] > 0 or r["deferred"] > 0:
-                                delivery_status = "⚠️ Delayed"
+                                delivery_status = _t("⚠️ Delayed")
                                 status_priority = 6
                             # Default to pending
                             else:
-                                delivery_status = "⏳ Pending"
+                                delivery_status = _t("⏳ Pending")
                                 status_priority = 7
                             
                             # Format timestamp
@@ -780,25 +780,25 @@ def main():
                             is_delivered = r["delivered"] > 0
                             
                             row_data = {
-                                "Recipient": r["email"],
-                                "Delivery Status": delivery_status,
-                                "Delivered": "✓" if is_delivered else "—",
-                                "Read": "✓" if (r["opened"] > 0 and is_delivered) else "—",
-                                "Clicked": "✓" if (r["clicks"] > 0 and is_delivered) else "—",
-                                "Timestamp": timestamp_str
+                                _t("Recipient"): r["email"],
+                                _t("Delivery Status"): delivery_status,
+                                _t("Delivered"): "✓" if is_delivered else "—",
+                                _t("Read"): "✓" if (r["opened"] > 0 and is_delivered) else "—",
+                                _t("Clicked"): "✓" if (r["clicks"] > 0 and is_delivered) else "—",
+                                _t("Timestamp"): timestamp_str
                             }
                             
                             # Add debug columns if enabled
                             if show_debug:
-                                row_data["Last Event"] = r["last_event"]
-                                row_data["Delivered Count"] = r["delivered"]
-                                row_data["Opened Count"] = r["opened"]
-                                row_data["Clicks Count"] = r["clicks"]
-                                row_data["Hard Bounces"] = r["hardBounces"]
-                                row_data["Soft Bounces"] = r["softBounces"]
-                                row_data["Blocked"] = r["blocked"]
-                                row_data["Deferred"] = r["deferred"]
-                                row_data["Status Priority"] = status_priority
+                                row_data[_t("Last Event")] = r["last_event"]
+                                row_data[_t("Delivered Count")] = r["delivered"]
+                                row_data[_t("Opened Count")] = r["opened"]
+                                row_data[_t("Clicks Count")] = r["clicks"]
+                                row_data[_t("Hard Bounces")] = r["hardBounces"]
+                                row_data[_t("Soft Bounces")] = r["softBounces"]
+                                row_data[_t("Blocked")] = r["blocked"]
+                                row_data[_t("Deferred")] = r["deferred"]
+                                row_data[_t("Status Priority")] = status_priority
                             
                             activity_rows.append(row_data)
                         
@@ -898,12 +898,12 @@ def main():
         logger.error(f"Error in email status page: {error_message}", exc_info=True)
         
         # Show detailed debug info
-        with st.expander("🔍 " + _t("Debug Information")):
-            st.markdown("**Error Type:** " + type(e).__name__)
+        with st.expander(_t("🔍 Debug Information")):
+            st.markdown("**" + _t("Error Type:") + "** " + type(e).__name__)
             st.code(error_message)
             
             # Show potential solutions
-            st.markdown("**Possible Solutions:**")
+            st.markdown("**" + _t("Possible Solutions:") + "**")
             if "Rate limit" in error_message:
                 st.markdown("- Wait 1-2 minutes before retrying")
                 st.markdown("- Reduce the frequency of requests")
