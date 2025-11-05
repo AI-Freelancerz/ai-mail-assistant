@@ -40,6 +40,9 @@ class BrevoStatusClient:
             
         Returns:
             Result of the function call
+            
+        Raises:
+            ApiException: If all retries are exhausted or a non-retryable error occurs
         """
         delay = initial_delay
         for attempt in range(max_retries):
@@ -48,14 +51,32 @@ class BrevoStatusClient:
             except ApiException as e:
                 if e.status == 429:  # Rate limited
                     if attempt < max_retries - 1:
-                        logger.warning(f"Rate limited. Retrying in {delay}s... (attempt {attempt + 1}/{max_retries})")
+                        # Check for Retry-After header
+                        retry_after = None
+                        if hasattr(e, 'headers') and e.headers:
+                            retry_after = e.headers.get('Retry-After') or e.headers.get('retry-after')
+                        
+                        # Use Retry-After if available, otherwise exponential backoff
+                        if retry_after:
+                            try:
+                                delay = float(retry_after)
+                                logger.warning(f"Rate limited. Retry-After header suggests waiting {delay}s (attempt {attempt + 1}/{max_retries})")
+                            except (ValueError, TypeError):
+                                logger.warning(f"Rate limited. Using exponential backoff: {delay}s (attempt {attempt + 1}/{max_retries})")
+                        else:
+                            logger.warning(f"Rate limited. Retrying in {delay}s... (attempt {attempt + 1}/{max_retries})")
+                        
                         time.sleep(delay)
-                        delay *= 2  # Exponential backoff
+                        delay *= 2  # Exponential backoff for next attempt
                     else:
                         logger.error(f"Rate limit exceeded after {max_retries} attempts")
                         raise
                 else:
+                    # Non-retryable error, raise immediately
                     raise
+        
+        # Should never reach here, but just in case
+        raise Exception(f"Failed after {max_retries} retries")
         
     def get_email_events(
         self,
@@ -150,12 +171,29 @@ class BrevoStatusClient:
             return events, total
             
         except ApiException as e:
-            logger.error(f"API error fetching email events: {e.status} - {e.reason}")
-            if hasattr(e, 'body'):
-                logger.error(f"Error body: {e.body}")
-            raise Exception(f"Failed to fetch email events: {e.reason}")
+            # Log detailed error information
+            error_msg = f"Brevo API error: HTTP {e.status}"
+            
+            if hasattr(e, 'reason') and e.reason:
+                error_msg += f" - {e.reason}"
+            
+            if hasattr(e, 'body') and e.body:
+                try:
+                    # Try to parse error body for more details
+                    import json
+                    error_body = json.loads(e.body) if isinstance(e.body, str) else e.body
+                    if isinstance(error_body, dict) and 'message' in error_body:
+                        error_msg += f" - {error_body['message']}"
+                    logger.error(f"Error body: {error_body}")
+                except:
+                    logger.error(f"Error body: {e.body}")
+            
+            logger.error(error_msg)
+            
+            # Raise with more context
+            raise Exception(f"Failed to fetch email events: {error_msg}") from e
         except Exception as e:
-            logger.error(f"Unexpected error fetching email events: {str(e)}")
+            logger.error(f"Unexpected error fetching email events: {str(e)}", exc_info=True)
             raise
     
     def get_email_content(self, uuid: str) -> Optional[Dict]:

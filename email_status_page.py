@@ -291,38 +291,73 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # Header
-    st.title("📧 " + _t("Email Status Dashboard"))
-    st.markdown(_t("View latest email activity from Brevo. Data is fetched live on each refresh."))
+    # Header with Refresh button
+    col_title, col_refresh = st.columns([5, 1])
+    with col_title:
+        st.title("📧 " + _t("Email Status Dashboard"))
+        st.markdown(_t("View latest email activity from Brevo. Data is fetched live on each refresh."))
+    with col_refresh:
+        st.markdown("<br>", unsafe_allow_html=True)  # Add spacing to align with title
+        if st.button(_t("🔄 Refresh Data"), type="primary", use_container_width=True, key="refresh_top"):
+            st.session_state.status_page_offset = 0
+            st.rerun()
 
-    # Check for Brevo API key
-    if not BREVO_API_KEY:
-        st.error(_t("Brevo API key not found in configuration. Please configure BREVO_API_KEY in config.py or secrets."))
-        st.code(
-            """
-# In .streamlit/secrets.toml:
-BREVO_API_KEY = "your-brevo-api-key"
-
-# Or in config.py:
-BREVO_API_KEY = os.getenv("BREVO_API_KEY")
-            """
-        )
+    # Check for Brevo API key with better validation
+    if not BREVO_API_KEY or BREVO_API_KEY.strip() == "":
+        st.error(_t("❌ Brevo API key not found in configuration"))
+        st.warning(_t("Please configure your Brevo API key to use this feature."))
+        
+        with st.expander("📖 How to configure"):
+            st.markdown("""
+            **Option 1: Using Streamlit Secrets (Recommended for production)**
+            
+            Create or edit `.streamlit/secrets.toml`:
+            ```toml
+            BREVO_API_KEY = "xkeysib-your-api-key-here"
+            ```
+            
+            **Option 2: Using Environment Variable**
+            
+            Set environment variable before running:
+            ```bash
+            export BREVO_API_KEY="xkeysib-your-api-key-here"  # Linux/Mac
+            set BREVO_API_KEY=xkeysib-your-api-key-here       # Windows
+            ```
+            
+            **Option 3: Using .env file**
+            
+            Create `.env` file:
+            ```
+            BREVO_API_KEY=xkeysib-your-api-key-here
+            ```
+            
+            **How to get your Brevo API key:**
+            1. Log in to your Brevo account
+            2. Go to Settings → SMTP & API → API Keys
+            3. Create a new API key or copy an existing one
+            4. Make sure it has permission to access "Email Campaigns"
+            """)
+        
         st.stop()
 
-    # Initialize client
-    client = BrevoStatusClient(BREVO_API_KEY)
+    # Validate API key format
+    if not BREVO_API_KEY.startswith("xkeysib-"):
+        st.warning("⚠️ API key format looks unusual. Brevo API keys typically start with 'xkeysib-'")
 
-    # Sidebar - simplified with only refresh
+    # Initialize client with error handling
+    try:
+        client = BrevoStatusClient(BREVO_API_KEY)
+    except Exception as e:
+        st.error(f"❌ Failed to initialize Brevo client: {str(e)}")
+        logger.error(f"Failed to initialize BrevoStatusClient: {str(e)}", exc_info=True)
+        st.stop()
+
+    # Set date range and filters
     start_date = datetime.now() - timedelta(days=7)
     end_date = datetime.now()
     limit = 100
     event_filter = None
     email_search = None
-
-    # Refresh button
-    if st.sidebar.button(_t("🔄 Refresh Data"), type="primary", use_container_width=True):
-        st.session_state.status_page_offset = 0
-        st.rerun()
 
     # Main content
     try:
@@ -367,14 +402,38 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
                     }
 
                 event_type = event["event"]
-                if event_type in email_data[msg_id]:
-                    email_data[msg_id][event_type] += 1
+                
+                # Count each event type explicitly
+                if event_type == "request" or event_type == "requests":
+                    email_data[msg_id]["requests"] += 1
+                elif event_type == "delivered":
+                    email_data[msg_id]["delivered"] += 1
+                elif event_type == "opened" or event_type == "open":
+                    email_data[msg_id]["opened"] += 1
+                elif event_type == "clicks" or event_type == "click":
+                    email_data[msg_id]["clicks"] += 1
+                elif event_type == "hardBounces" or event_type == "hard_bounce":
+                    email_data[msg_id]["hardBounces"] += 1
+                elif event_type == "softBounces" or event_type == "soft_bounce":
+                    email_data[msg_id]["softBounces"] += 1
+                elif event_type == "blocked":
+                    email_data[msg_id]["blocked"] += 1
+                elif event_type == "spam":
+                    email_data[msg_id]["spam"] += 1
+                elif event_type == "deferred":
+                    email_data[msg_id]["deferred"] += 1
+                elif event_type == "unsubscribed":
+                    email_data[msg_id]["unsubscribed"] += 1
+                elif event_type == "error":
+                    email_data[msg_id]["error"] += 1
 
+                # Track most recent event
                 if not email_data[msg_id]["last_event_date"] or event["date"] > email_data[msg_id]["last_event_date"]:
                     email_data[msg_id]["last_event"] = event_type
                     email_data[msg_id]["last_event_date"] = event["date"]
 
-                if event_type == "clicks" and event.get("link"):
+                # Track clicked links
+                if (event_type == "clicks" or event_type == "click") and event.get("link"):
                     email_data[msg_id]["click_links"].append(event["link"])
 
             # Always group by message batch
@@ -647,18 +706,61 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
                         st.markdown('<div class="activity-section">', unsafe_allow_html=True)
                         st.markdown('<div class="activity-header">📋 Activity Log</div>', unsafe_allow_html=True)
                         
+                        # Add explanation about tracking
+                        with st.expander("ℹ️ Understanding email tracking"):
+                            st.markdown("""
+                            **How email tracking works:**
+                            - **Delivered**: Email successfully reached the recipient's inbox
+                            - **Read (Opened)**: Recipient opened the email and loaded images (tracking pixel)
+                            - **Clicked**: Recipient clicked a link in the email
+                            
+                            **Why you might see "Clicked" without "Read":**
+                            - Recipient has images disabled/blocked in their email client
+                            - Recipient clicked a link from email preview without fully opening
+                            - Some email clients block tracking pixels but allow link clicks
+                            
+                            **This is normal and indicates engagement even without open tracking!**
+                            """)
+                        
+                        # Add debug toggle
+                        show_debug = st.checkbox("🔍 Show debug info", value=False, key=f"debug_{group_key}")
+                        
                         # Build activity table data
                         activity_rows = []
                         for r in group["recipients"]:
-                            # Determine delivery status
+                            # Determine delivery status with improved logic
+                            # Priority: Failed > Delivered (with engagement) > Delayed > Pending
+                            
+                            # Check for failures first
                             if r["hardBounces"] > 0 or r["blocked"] > 0:
-                                delivery_status = "Failed"
-                            elif r["softBounces"] > 0 or r["deferred"] > 0:
-                                delivery_status = "Delayed"
+                                delivery_status = "❌ Failed"
+                                status_priority = 1
+                            # Check for successful delivery
                             elif r["delivered"] > 0:
-                                delivery_status = "Delivered"
+                                # Determine engagement level
+                                has_opened = r["opened"] > 0
+                                has_clicked = r["clicks"] > 0
+                                
+                                if has_clicked and has_opened:
+                                    delivery_status = "🎯 Engaged (Opened & Clicked)"
+                                    status_priority = 2
+                                elif has_clicked:
+                                    delivery_status = "🔗 Clicked (without open tracking)"
+                                    status_priority = 3
+                                elif has_opened:
+                                    delivery_status = "📖 Opened"
+                                    status_priority = 4
+                                else:
+                                    delivery_status = "✅ Delivered"
+                                    status_priority = 5
+                            # Check for soft failures
+                            elif r["softBounces"] > 0 or r["deferred"] > 0:
+                                delivery_status = "⚠️ Delayed"
+                                status_priority = 6
+                            # Default to pending
                             else:
-                                delivery_status = "Pending"
+                                delivery_status = "⏳ Pending"
+                                status_priority = 7
                             
                             # Format timestamp
                             timestamp_str = r["last_event_date"]
@@ -672,14 +774,33 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
                                 except Exception:
                                     pass
                             
-                            activity_rows.append({
+                            # Build row data with validated checkmarks
+                            # Rule: Can only show Read/Clicked if delivered
+                            # Note: Clicked can happen without Read (images blocked)
+                            is_delivered = r["delivered"] > 0
+                            
+                            row_data = {
                                 "Recipient": r["email"],
                                 "Delivery Status": delivery_status,
-                                "Delivered": "✓" if r["delivered"] > 0 else "",
-                                "Read": "✓" if r["opened"] > 0 else "",
-                                "Clicked": "✓" if r["clicks"] > 0 else "",
+                                "Delivered": "✓" if is_delivered else "—",
+                                "Read": "✓" if (r["opened"] > 0 and is_delivered) else "—",
+                                "Clicked": "✓" if (r["clicks"] > 0 and is_delivered) else "—",
                                 "Timestamp": timestamp_str
-                            })
+                            }
+                            
+                            # Add debug columns if enabled
+                            if show_debug:
+                                row_data["Last Event"] = r["last_event"]
+                                row_data["Delivered Count"] = r["delivered"]
+                                row_data["Opened Count"] = r["opened"]
+                                row_data["Clicks Count"] = r["clicks"]
+                                row_data["Hard Bounces"] = r["hardBounces"]
+                                row_data["Soft Bounces"] = r["softBounces"]
+                                row_data["Blocked"] = r["blocked"]
+                                row_data["Deferred"] = r["deferred"]
+                                row_data["Status Priority"] = status_priority
+                            
+                            activity_rows.append(row_data)
                         
                         # Display table in a container - auto-size based on number of rows
                         # Calculate appropriate height: header (38px) + rows (35px each) + padding
@@ -758,10 +879,43 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
             st.markdown(_t("Try adjusting your filters or time range."))
 
     except Exception as e:
-        st.error(_t("Error fetching email events: ") + str(e))
-        logger.error(f"Error in email status page: {str(e)}", exc_info=True)
-        with st.expander(_t("Debug Information")):
-            st.code(str(e))
+        error_message = str(e)
+        
+        # Categorize error for better user feedback
+        if "Rate limit" in error_message or "429" in error_message:
+            st.error("⚠️ " + _t("Rate limit exceeded. Please wait a moment and try again."))
+            st.info(_t("Brevo API has rate limits. The system will automatically retry with exponential backoff."))
+        elif "API key" in error_message or "401" in error_message or "403" in error_message:
+            st.error("🔑 " + _t("Authentication error. Please check your Brevo API key."))
+            st.warning(_t("Your API key may be invalid or may not have the required permissions."))
+        elif "404" in error_message:
+            st.error("❓ " + _t("Resource not found. The requested data may not exist."))
+        elif "timeout" in error_message.lower():
+            st.error("⏱️ " + _t("Request timed out. Please try again."))
+        else:
+            st.error("❌ " + _t("Error fetching email events: ") + error_message)
+        
+        logger.error(f"Error in email status page: {error_message}", exc_info=True)
+        
+        # Show detailed debug info
+        with st.expander("🔍 " + _t("Debug Information")):
+            st.markdown("**Error Type:** " + type(e).__name__)
+            st.code(error_message)
+            
+            # Show potential solutions
+            st.markdown("**Possible Solutions:**")
+            if "Rate limit" in error_message:
+                st.markdown("- Wait 1-2 minutes before retrying")
+                st.markdown("- Reduce the frequency of requests")
+                st.markdown("- Contact Brevo support to increase your rate limit")
+            elif "API key" in error_message:
+                st.markdown("- Verify your API key in Brevo dashboard")
+                st.markdown("- Ensure the API key has 'Email Campaigns' permissions")
+                st.markdown("- Check if the API key is correctly configured in secrets/config")
+            else:
+                st.markdown("- Check your internet connection")
+                st.markdown("- Try refreshing the page")
+                st.markdown("- Contact support if the issue persists")
 
     # Footer
     st.markdown("---")
