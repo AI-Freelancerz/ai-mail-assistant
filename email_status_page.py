@@ -34,8 +34,8 @@ def main():
         st.session_state.status_page_offset = 0
     if "status_page_limit" not in st.session_state:
         st.session_state.status_page_limit = 50
-    if "status_expanded_rows" not in st.session_state:
-        st.session_state.status_expanded_rows = set()
+    if "selected_campaign" not in st.session_state:
+        st.session_state.selected_campaign = None
 
     # Apply language from main app if available
     if "language" in st.session_state:
@@ -50,9 +50,30 @@ def main():
         .metric-box { background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center; flex: 1; }
         .metric-value { font-size: 2rem; font-weight: bold; color: #2563eb; }
         .metric-label { font-size: 0.9rem; color: #6b7280; margin-top: 0.5rem; }
-        .event-row { padding: 0.75rem; border-bottom: 1px solid #e5e7eb; cursor: pointer; }
-        .event-row:hover { background-color: #f9fafb; }
-        .event-details { background-color: #f3f4f6; padding: 1rem; margin-top: 0.5rem; border-radius: 4px; font-size: 0.9rem; }
+        .campaign-item { 
+            background: white; 
+            border: 1px solid #e5e7eb; 
+            border-radius: 8px; 
+            padding: 1rem; 
+            margin-bottom: 0.5rem; 
+            cursor: pointer; 
+            transition: all 0.2s;
+        }
+        .campaign-item:hover { 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+            border-color: #2563eb;
+        }
+        .campaign-item.selected { 
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+        .sidebar-detail { 
+            background: #f9fafb; 
+            border-left: 1px solid #e5e7eb; 
+            padding: 1.5rem; 
+            border-radius: 8px;
+            height: 100%;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -210,50 +231,97 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 
             tab1, tab2 = st.tabs([_t("📊 Detailed View"), _t("📥 Download Report")])
             with tab1:
-                st.markdown("### " + _t("Email Delivery Status"))
-                st.markdown(_t("Grouped by message batch. Click on a group to see individual recipients."))
+                st.markdown("### " + _t("Email Campaigns"))
 
-                for group_key, group in grouped_data.items():
-                    date_str = group["last_event_date"]
-                    if date_str and date_str != "N/A":
-                        try:
-                            if "T" in date_str or "+" in date_str or "Z" in date_str:
-                                dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                            else:
-                                dt = datetime.fromtimestamp(float(date_str))
-                            date_str = dt.strftime("%Y-%m-%d %H:%M")
-                        except Exception:
-                            pass
+                # Create two columns: list view and detail sidebar
+                list_col, detail_col = st.columns([2, 3])
 
-                    delivery_rate = f"{(group['total_delivered']/group['total_sent']*100):.0f}%" if group["total_sent"] > 0 else "0%"
-                    open_rate = f"{(group['total_opened']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
-                    click_rate = f"{(group['total_clicks']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
+                with list_col:
+                    # Create a simple clickable list of campaigns
+                    campaign_keys = list(grouped_data.keys())
+                    
+                    if campaign_keys:
+                        # Initialize selection if not set
+                        if st.session_state.selected_campaign not in campaign_keys:
+                            st.session_state.selected_campaign = campaign_keys[0]
+                        
+                        # Display each campaign as a clickable button
+                        for group_key in campaign_keys:
+                            group = grouped_data[group_key]
+                            is_selected = st.session_state.selected_campaign == group_key
+                            
+                            # Create button with full subject
+                            if st.button(
+                                group["subject"],
+                                key=f"btn_{group_key}",
+                                use_container_width=True,
+                                type="primary" if is_selected else "secondary"
+                            ):
+                                st.session_state.selected_campaign = group_key
+                                st.rerun()
 
-                    with st.expander(
-                        f"📧 **{group['subject'][:50]}...** | 🎯 {group['total_sent']} recipients | ✅ {delivery_rate} delivered | 📖 {open_rate} opened | 🔗 {click_rate} clicked",
-                        expanded=False,
-                    ):
-                        c1, c2, c3, c4, c5, c6 = st.columns(6)
-                        with c1:
-                            st.metric("Sent", group["total_sent"])
-                        with c2:
-                            st.metric("Delivered", f"{group['total_delivered']} ({delivery_rate})")
-                        with c3:
-                            st.metric("Opened", f"{group['total_opened']} ({open_rate})")
-                        with c4:
-                            st.metric("Clicked", f"{group['total_clicks']} ({click_rate})")
-                        with c5:
-                            bounced = group["total_hardBounces"] + group["total_softBounces"]
-                            st.metric("Bounced", bounced)
-                        with c6:
-                            st.metric("Last Activity", date_str if date_str != "N/A" else "-")
-
+                with detail_col:
+                    # Display selected campaign details in sidebar
+                    if st.session_state.selected_campaign and st.session_state.selected_campaign in grouped_data:
+                        group = grouped_data[st.session_state.selected_campaign]
+                        group_key = st.session_state.selected_campaign
+                        
+                        st.markdown(f"<div class='sidebar-detail'>", unsafe_allow_html=True)
+                        
+                        # Format date
+                        date_str = group["last_event_date"]
+                        if date_str and date_str != "N/A":
+                            try:
+                                if "T" in date_str or "+" in date_str or "Z" in date_str:
+                                    dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                                else:
+                                    dt = datetime.fromtimestamp(float(date_str))
+                                date_str = dt.strftime("%Y-%m-%d %H:%M")
+                            except Exception:
+                                pass
+                        
+                        # Campaign metrics
+                        delivery_rate = f"{(group['total_delivered']/group['total_sent']*100):.0f}%" if group["total_sent"] > 0 else "0%"
+                        open_rate = f"{(group['total_opened']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
+                        click_rate = f"{(group['total_clicks']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
+                        
+                        # Show quick stats at the top
+                        st.markdown(f"**🎯 {group['total_sent']} recipients | ✅ {delivery_rate} delivered | 📖 {open_rate} opened | 🔗 {click_rate} clicked**")
                         st.markdown("---")
+                        
+                        st.markdown("#### " + _t("Campaign Metrics"))
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            st.metric(_t("Sent"), group["total_sent"])
+                            st.metric(_t("Delivered"), f"{group['total_delivered']}")
+                        with c2:
+                            st.metric(_t("Opened"), f"{group['total_opened']}")
+                            st.metric(_t("Clicked"), f"{group['total_clicks']}")
+                        with c3:
+                            bounced = group["total_hardBounces"] + group["total_softBounces"]
+                            st.metric(_t("Bounced"), bounced)
+                            st.metric(_t("Last Activity"), date_str if date_str != "N/A" else "-")
+                        
+                        st.markdown("#### " + _t("Rates"))
+                        rate_c1, rate_c2, rate_c3 = st.columns(3)
+                        with rate_c1:
+                            st.metric(_t("Delivery Rate"), delivery_rate)
+                        with rate_c2:
+                            st.metric(_t("Open Rate"), open_rate)
+                        with rate_c3:
+                            st.metric(_t("Click Rate"), click_rate)
+                        
+                        st.markdown("---")
+                        
+                        # Campaign info
                         st.markdown(f"**Batch ID:** `{group_key}`")
                         if group["tag"]:
                             st.markdown(f"**Tag:** {group['tag']}")
-
-                        st.markdown("#### Recipients")
+                        
+                        st.markdown("---")
+                        st.markdown("#### " + _t("Recipients"))
+                        
+                        # Recipients table
                         rows = []
                         for r in group["recipients"]:
                             if r["hardBounces"] > 0 or r["blocked"] > 0:
@@ -277,7 +345,10 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
                                     "Clicked": f"{r['clicks']}x" if r["clicks"] > 0 else "",
                                 }
                             )
-                        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=400)
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"**🎯 Select a campaign tab to view details**")
 
             with tab2:
                 st.markdown("### " + _t("Download Report"))
