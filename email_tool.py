@@ -163,8 +163,8 @@ def _build_message_versions(messages):
         body = msg.get('body', '')
         html_body = body.replace('\n', '<br>')
         
-        # Enhanced logging to track what's being built
-        logging.debug(f"[EMAIL_TOOL] Building version {i+1}: to={to_email}, subject='{subject[:50]}...', body_len={len(body)}")
+        # Enhanced logging to track what's being built (defensive slicing)
+        logging.debug(f"[EMAIL_TOOL] Building version {i+1}: to={(to_email or '')}, subject='{(subject or '')[:50]}...', body_len={len(body or '')}")
         
         if not subject:
             logging.warning(f"[EMAIL_TOOL] Message {i+1} has empty subject for {to_email}")
@@ -527,7 +527,7 @@ def _send_email_chunk_with_retry(sender_email: str, sender_name: str, chunk: Lis
     global_subject = first_msg.get('subject', 'No Subject')
     global_html = first_msg.get('body', '').replace('\n', '<br>')
     
-    logging.info(f"[EMAIL_TOOL] Sending chunk with {len(chunk)} messages, global subject: '{global_subject[:50]}...'")
+    logging.info(f"[EMAIL_TOOL] Sending chunk with {len(chunk)} messages, global subject: '{(global_subject or 'No Subject')[:50]}...'")
     
     # Build batch request
     # Note: Brevo requires global subject/html_content as fallbacks even when using message_versions
