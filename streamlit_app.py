@@ -1099,7 +1099,12 @@ def page_results():
     st.markdown("---")
 
     # Colored metrics instead of st.metric
-    col1, col2, col3 = st.columns(3)
+    # Use 4 columns if duplicates exist, otherwise 3
+    if duplicates_removed > 0:
+        col1, col2, col3, col4 = st.columns(4)
+    else:
+        col1, col2, col3 = st.columns(3)
+    
     with col1:
         colored_metric(
             _t("Total Contacts Uploaded"),
@@ -1114,24 +1119,30 @@ def page_results():
             label_color="#166534",    # green-800
             value_color="#22c55e",    # green-500
         )
-    with col3:
-        colored_metric(
-            _t("Emails Failed"),
-            f"{failed}",
-            label_color="#991b1b",    # red-800
-            value_color="#ef4444",    # red-500
-        )
     
-    # Add 4th column for duplicates if any were removed
+    # Show duplicates removed between sent and failed
     if duplicates_removed > 0:
-        st.markdown("---")
-        col_dup = st.columns(1)[0]
-        with col_dup:
+        with col3:
             colored_metric(
-                _t("🔄 Duplicate Addresses Removed"),
+                _t("🔄 Duplicates Removed"),
                 f"{duplicates_removed}",
                 label_color="#92400e",    # amber-800
                 value_color="#f59e0b",    # amber-500
+            )
+        with col4:
+            colored_metric(
+                _t("Emails Failed"),
+                f"{failed}",
+                label_color="#991b1b",    # red-800
+                value_color="#ef4444",    # red-500
+            )
+    else:
+        with col3:
+            colored_metric(
+                _t("Emails Failed"),
+                f"{failed}",
+                label_color="#991b1b",    # red-800
+                value_color="#ef4444",    # red-500
             )
     
     st.markdown("---")
