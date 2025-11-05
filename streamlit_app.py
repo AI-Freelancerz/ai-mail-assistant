@@ -530,7 +530,6 @@ def send_all_emails():
                         <br><br>
                         <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
                             <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
-                            <br>
                             <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
                         </div>
                     """
@@ -959,7 +958,6 @@ def page_preview():
                     <br><br>
                     <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
                         <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
-                        <br>
                         <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
                     </div>
                 """
