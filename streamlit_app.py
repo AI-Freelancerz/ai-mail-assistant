@@ -175,7 +175,7 @@ def init_state():
         st.session_state.contact_issues = []
         st.session_state.attachments = [] # Stores UploadedFile objects
         st.session_state.email_sending_status = []
-        st.session_state.sending_summary = {'total_contacts':0, 'successful':0, 'failed':0}
+        st.session_state.sending_summary = {'total_contacts':0, 'successful':0, 'failed':0, 'duplicates_removed':0}
         st.session_state.detailed_response = None
         st.session_state.generation_in_progress = False
         st.session_state.sending_in_progress = False
@@ -674,7 +674,8 @@ def send_all_emails():
                 st.session_state.sending_summary = {
                     'total_contacts': total_contacts,
                     'successful': success,
-                    'failed': fail
+                    'failed': fail,
+                    'duplicates_removed': duplicates_removed
                 }
 
                 # Store detailed response data for the results page
@@ -1075,14 +1076,24 @@ def page_results():
     total = summary['total_contacts']
     successful = summary['successful']
     failed = summary['failed']
+    duplicates_removed = summary.get('duplicates_removed', 0)
+    unique_messages_count = total - duplicates_removed
 
     st.markdown("---")
-    if total > 0 and successful == total:
+    # Determine status based on actual failures, not duplicates
+    if failed == 0 and successful > 0:
         st.success(_t("All emails sent successfully!"))
-        st.write(_t("All {count} emails were sent without any issues.", count=total))
-    elif total > 0:
+        if duplicates_removed > 0:
+            st.write(_t("{unique} unique emails sent from {total} contacts ({duplicates} duplicates removed).", 
+                       unique=successful, total=total, duplicates=duplicates_removed))
+        else:
+            st.write(_t("All {count} emails were sent without any issues.", count=total))
+    elif failed > 0 and successful > 0:
         st.warning(_t("Sending complete with errors."))
         st.write(_t("Some emails failed to send. Please check the log below for details."))
+    elif failed > 0 and successful == 0:
+        st.error(_t("All emails failed to send."))
+        st.write(_t("Please check the configuration and logs below."))
     else:
         st.info(_t("No emails were processed."))
     st.markdown("---")
@@ -1091,25 +1102,37 @@ def page_results():
     col1, col2, col3 = st.columns(3)
     with col1:
         colored_metric(
-            _t("Total Contacts Processed"),
+            _t("Total Contacts Uploaded"),
             f"{total}",
             label_color="#334155",    # slate-700
             value_color="#2563eb",    # blue-600
         )
     with col2:
         colored_metric(
-            _t("Emails Sent Successfully"),
+            _t("Unique Emails Sent"),
             f"{successful}",
             label_color="#166534",    # green-800
             value_color="#22c55e",    # green-500
         )
     with col3:
         colored_metric(
-            _t("Emails Failed to Send"),
+            _t("Emails Failed"),
             f"{failed}",
             label_color="#991b1b",    # red-800
             value_color="#ef4444",    # red-500
         )
+    
+    # Add 4th column for duplicates if any were removed
+    if duplicates_removed > 0:
+        st.markdown("---")
+        col_dup = st.columns(1)[0]
+        with col_dup:
+            colored_metric(
+                _t("🔄 Duplicate Addresses Removed"),
+                f"{duplicates_removed}",
+                label_color="#92400e",    # amber-800
+                value_color="#f59e0b",    # amber-500
+            )
     
     st.markdown("---")
     # Drawer: Delivery details (per-message statuses) + logs, opened by default
