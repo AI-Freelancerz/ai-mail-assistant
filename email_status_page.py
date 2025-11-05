@@ -41,38 +41,250 @@ def main():
     if "language" in st.session_state:
         set_language(st.session_state.language)
 
-    # Custom CSS
+    # Modern SaaS Dashboard CSS
     st.markdown(
         """
         <style>
-        .status-card { background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
-        .metric-container { display: flex; justify-content: space-around; gap: 1rem; margin: 1rem 0; }
-        .metric-box { background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center; flex: 1; }
-        .metric-value { font-size: 2rem; font-weight: bold; color: #2563eb; }
-        .metric-label { font-size: 0.9rem; color: #6b7280; margin-top: 0.5rem; }
-        .campaign-item { 
-            background: white; 
-            border: 1px solid #e5e7eb; 
-            border-radius: 8px; 
-            padding: 1rem; 
-            margin-bottom: 0.5rem; 
-            cursor: pointer; 
-            transition: all 0.2s;
+        /* Global Dashboard Styles */
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            max-width: 100%;
         }
-        .campaign-item:hover { 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
-            border-color: #2563eb;
+        
+        /* Fixed Left Sidebar for Campaign Tabs */
+        div[data-testid="column"]:first-child {
+            background: #fafafa;
+            border-right: 1px solid #e5e7eb;
+            padding: 0 !important;
+            min-height: 500px;
         }
-        .campaign-item.selected { 
-            border-color: #2563eb;
-            background: #eff6ff;
+        
+        /* Style Streamlit buttons to look like vertical tabs */
+        div[data-testid="column"]:first-child button {
+            background: white !important;
+            border: none !important;
+            border-left: 3px solid transparent !important;
+            color: #374151 !important;
+            font-weight: 400 !important;
+            padding: 0.875rem 1rem !important;
+            text-align: left !important;
+            transition: all 0.2s ease !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            margin-bottom: 1px !important;
+            margin-top: 0 !important;
         }
-        .sidebar-detail { 
-            background: #f9fafb; 
-            border-left: 1px solid #e5e7eb; 
-            padding: 1.5rem; 
+        
+        div[data-testid="column"]:first-child button:hover {
+            background: #f3f4f6 !important;
+            border-left-color: #9ca3af !important;
+        }
+        
+        div[data-testid="column"]:first-child button[kind="primary"],
+        div[data-testid="column"]:first-child button[data-baseweb="button"][kind="primary"] {
+            background: #eff6ff !important;
+            border-left-color: #3b82f6 !important;
+            font-weight: 500 !important;
+            color: #1e40af !important;
+        }
+        
+        div[data-testid="column"]:first-child button[kind="primary"]:hover {
+            background: #dbeafe !important;
+            border-left-color: #2563eb !important;
+        }
+        
+        /* Remove default Streamlit spacing in sidebar */
+        div[data-testid="column"]:first-child > div {
+            padding: 0 !important;
+            margin: 0 !important;
+            gap: 0 !important;
+        }
+        
+        div[data-testid="column"]:first-child .element-container {
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        
+        /* Date Divider Styling */
+        .date-divider {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #374151;
+            padding: 0.5rem;
+            background: #e5e7eb;
+            margin: 0;
+            border-radius: 0;
+        }
+        
+        /* Sidebar Scrollbar */
+        .campaign-sidebar::-webkit-scrollbar {
+            width: 5px;
+        }
+        
+        .campaign-sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .campaign-sidebar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        
+        .campaign-sidebar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        /* Main Content Panel */
+        .main-panel {
+            padding-left: 2rem;
+        }
+        
+        .campaign-title {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 0.5rem;
+            line-height: 1.2;
+        }
+        
+        .campaign-meta {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        /* KPI Tiles */
+        .kpi-container {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .kpi-tile {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
+            padding: 1.25rem;
+            transition: all 0.2s ease;
+        }
+        
+        .kpi-tile:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-color: #cbd5e1;
+        }
+        
+        .kpi-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .kpi-icon {
+            font-size: 1.25rem;
+        }
+        
+        .kpi-label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+        
+        .kpi-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 0.5rem;
+            line-height: 1;
+        }
+        
+        .kpi-progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #e5e7eb;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 0.25rem;
+        }
+        
+        .kpi-progress-fill {
             height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #2563eb);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+        
+        .kpi-progress-fill.success {
+            background: linear-gradient(90deg, #10b981, #059669);
+        }
+        
+        .kpi-progress-fill.warning {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
+        
+        .kpi-progress-fill.danger {
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+        }
+        
+        .kpi-percentage {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        
+        /* Activity Table Section */
+        .activity-section {
+            margin-top: 2rem;
+        }
+        
+        .activity-header {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .activity-table-container {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 1400px) {
+            .kpi-container {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        @media (max-width: 900px) {
+            .kpi-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        /* Remove default Streamlit padding */
+        .element-container {
+            margin-bottom: 0 !important;
+        }
+        
+        /* Clean dataframe styling */
+        .stDataFrame {
+            border: none !important;
+        }
+        
+        .stDataFrame > div {
+            border: none !important;
         }
         </style>
         """,
@@ -229,72 +441,77 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 
             st.markdown("---")
 
-            tab1, tab2 = st.tabs([_t("📊 Detailed View"), _t("📥 Download Report")])
-            with tab1:
-                st.markdown("### " + _t("Email Campaigns"))
-
-                # Sort campaigns by date (newest first)
-                sorted_campaigns = sorted(
-                    grouped_data.items(),
-                    key=lambda x: x[1]["last_event_date"] if x[1]["last_event_date"] else "",
-                    reverse=True
-                )
-                
-                # Group campaigns by date
-                campaigns_by_date = {}
-                for group_key, group in sorted_campaigns:
-                    date_str = group["last_event_date"]
-                    if date_str and date_str != "N/A":
-                        try:
-                            if "T" in date_str or "+" in date_str or "Z" in date_str:
-                                dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                            else:
-                                dt = datetime.fromtimestamp(float(date_str))
-                            date_key = dt.strftime("%Y-%m-%d")
-                        except Exception:
-                            date_key = "Unknown"
-                    else:
+            # Sort campaigns by date (newest first)
+            sorted_campaigns = sorted(
+                grouped_data.items(),
+                key=lambda x: x[1]["last_event_date"] if x[1]["last_event_date"] else "",
+                reverse=True
+            )
+            
+            # Group campaigns by date
+            campaigns_by_date = {}
+            for group_key, group in sorted_campaigns:
+                date_str = group["last_event_date"]
+                if date_str and date_str != "N/A":
+                    try:
+                        if "T" in date_str or "+" in date_str or "Z" in date_str:
+                            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                        else:
+                            dt = datetime.fromtimestamp(float(date_str))
+                        date_key = dt.strftime("%Y-%m-%d")
+                    except Exception:
                         date_key = "Unknown"
-                    
-                    if date_key not in campaigns_by_date:
-                        campaigns_by_date[date_key] = []
-                    campaigns_by_date[date_key].append((group_key, group))
+                else:
+                    date_key = "Unknown"
+                
+                if date_key not in campaigns_by_date:
+                    campaigns_by_date[date_key] = []
+                campaigns_by_date[date_key].append((group_key, group))
 
-                # Create two columns: vertical tab list and detail view
-                list_col, detail_col = st.columns([2, 3])
+            # Initialize selection to first campaign if not set
+            if st.session_state.selected_campaign not in grouped_data:
+                if sorted_campaigns:
+                    st.session_state.selected_campaign = sorted_campaigns[0][0]
 
-                with list_col:
-                    # Initialize selection to first campaign if not set
-                    if st.session_state.selected_campaign not in grouped_data:
-                        if sorted_campaigns:
-                            st.session_state.selected_campaign = sorted_campaigns[0][0]
-                    
+            # Main dashboard layout: Sidebar + Content Panel
+            tab1, tab2 = st.tabs([_t("📊 Campaign Dashboard"), _t("📥 Download Report")])
+            
+            with tab1:
+                # Create two columns: fixed sidebar and main content
+                sidebar_col, main_col = st.columns([1, 3])
+
+                # === LEFT SIDEBAR: Campaign Tabs ===
+                with sidebar_col:
                     # Display campaigns grouped by date
                     for date_key in sorted(campaigns_by_date.keys(), reverse=True):
-                        st.markdown(f"**📅 {date_key}**")
+                        st.markdown(f'<div class="date-divider">📅 {date_key}</div>', unsafe_allow_html=True)
                         
                         for group_key, group in campaigns_by_date[date_key]:
                             is_selected = st.session_state.selected_campaign == group_key
                             
-                            # Create button with full subject
+                            # Create campaign tab button
                             if st.button(
-                                group["subject"],
-                                key=f"btn_{group_key}",
+                                group["subject"][:60] + ("..." if len(group["subject"]) > 60 else ""),
+                                key=f"campaign_tab_{group_key}",
+                                help=group["subject"],
                                 use_container_width=True,
                                 type="primary" if is_selected else "secondary"
                             ):
                                 st.session_state.selected_campaign = group_key
                                 st.rerun()
-                        
-                        st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
 
-                with detail_col:
-                    # Display selected campaign details
+                # === MAIN CONTENT PANEL ===
+                with main_col:
                     if st.session_state.selected_campaign and st.session_state.selected_campaign in grouped_data:
                         group = grouped_data[st.session_state.selected_campaign]
                         group_key = st.session_state.selected_campaign
                         
-                        # Format date
+                        st.markdown('<div class="main-panel">', unsafe_allow_html=True)
+                        
+                        # === Campaign Title & Metadata ===
+                        st.markdown(f'<div class="campaign-title">{group["subject"]}</div>', unsafe_allow_html=True)
+                        
+                        # Format timestamp
                         date_str = group["last_event_date"]
                         if date_str and date_str != "N/A":
                             try:
@@ -306,85 +523,181 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
                             except Exception:
                                 pass
                         
+                        meta_html = f'<div class="campaign-meta">'
+                        meta_html += f'<span>🕐 {date_str}</span>'
+                        meta_html += f'<span>·</span>'
+                        meta_html += f'<span>Batch: <code>{group_key}</code></span>'
+                        if group['tag']:
+                            meta_html += f'<span>·</span><span>Tag: {group["tag"]}</span>'
+                        meta_html += '</div>'
+                        st.markdown(meta_html, unsafe_allow_html=True)
+                        
+                        # === KPI Tiles ===
                         # Calculate metrics
                         bounced = group["total_hardBounces"] + group["total_softBounces"]
                         pending = group["total_sent"] - group["total_delivered"] - bounced
                         
-                        # Status tiles
-                        st.markdown(f"### {group['subject']}")
-                        st.caption(f"🕐 {date_str} · Batch: `{group_key}`" + (f" · Tag: {group['tag']}" if group['tag'] else ""))
+                        sent_pct = 100
+                        delivered_pct = (group['total_delivered']/group['total_sent']*100) if group['total_sent'] > 0 else 0
+                        failed_pct = (bounced/group['total_sent']*100) if group['total_sent'] > 0 else 0
+                        opened_pct = (group['total_opened']/group['total_delivered']*100) if group['total_delivered'] > 0 else 0
+                        pending_pct = (pending/group['total_sent']*100) if group['total_sent'] > 0 else 0
                         
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric(
-                                label="📧 Sent",
-                                value=group["total_sent"],
-                                delta=None
-                            )
-                        with col2:
-                            st.metric(
-                                label="✅ Delivered",
-                                value=group["total_delivered"],
-                                delta=f"{(group['total_delivered']/group['total_sent']*100):.0f}%" if group["total_sent"] > 0 else "0%"
-                            )
-                        with col3:
-                            st.metric(
-                                label="❌ Failed",
-                                value=bounced,
-                                delta=f"{(bounced/group['total_sent']*100):.0f}%" if group["total_sent"] > 0 else "0%",
-                                delta_color="inverse"
-                            )
-                        with col4:
-                            st.metric(
-                                label="⏳ Pending",
-                                value=pending,
-                                delta=None
+                        # Create 5 columns for KPI tiles
+                        kpi_cols = st.columns(5)
+                        
+                        # Sent KPI
+                        with kpi_cols[0]:
+                            st.markdown(
+                                f"""
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <span style="font-size: 1.25rem;">📧</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Sent</span>
+                                    </div>
+                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{group["total_sent"]}</div>
+                                    <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
+                                        <div style="height: 100%; width: {sent_pct}%; background: linear-gradient(90deg, #3b82f6, #2563eb); border-radius: 2px;"></div>
+                                    </div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{sent_pct:.0f}%</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
                             )
                         
-                        col5, col6 = st.columns(2)
-                        with col5:
-                            st.metric(
-                                label="📖 Opened",
-                                value=f"{group['total_opened']}",
-                                delta=f"{(group['total_opened']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
-                            )
-                        with col6:
-                            st.metric(
-                                label="🔗 Clicked",
-                                value=f"{group['total_clicks']}",
-                                delta=f"{(group['total_clicks']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
+                        # Delivered KPI
+                        with kpi_cols[1]:
+                            st.markdown(
+                                f"""
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <span style="font-size: 1.25rem;">✅</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Delivered</span>
+                                    </div>
+                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{group["total_delivered"]}</div>
+                                    <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
+                                        <div style="height: 100%; width: {delivered_pct}%; background: linear-gradient(90deg, #10b981, #059669); border-radius: 2px;"></div>
+                                    </div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{delivered_pct:.0f}%</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
                             )
                         
-                        st.markdown("---")
+                        # Failed KPI
+                        with kpi_cols[2]:
+                            st.markdown(
+                                f"""
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <span style="font-size: 1.25rem;">❌</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Failed</span>
+                                    </div>
+                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{bounced}</div>
+                                    <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
+                                        <div style="height: 100%; width: {failed_pct}%; background: linear-gradient(90deg, #ef4444, #dc2626); border-radius: 2px;"></div>
+                                    </div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{failed_pct:.0f}%</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
                         
-                        # Recipients status table
-                        st.markdown("#### " + _t("Recipient Status"))
-                        rows = []
+                        # Read KPI
+                        with kpi_cols[3]:
+                            st.markdown(
+                                f"""
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <span style="font-size: 1.25rem;">📖</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Read</span>
+                                    </div>
+                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{group["total_opened"]}</div>
+                                    <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
+                                        <div style="height: 100%; width: {opened_pct}%; background: linear-gradient(90deg, #10b981, #059669); border-radius: 2px;"></div>
+                                    </div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{opened_pct:.0f}% of delivered</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                        
+                        # Pending KPI
+                        with kpi_cols[4]:
+                            st.markdown(
+                                f"""
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <span style="font-size: 1.25rem;">⏳</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">Pending</span>
+                                    </div>
+                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{pending}</div>
+                                    <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
+                                        <div style="height: 100%; width: {pending_pct}%; background: linear-gradient(90deg, #f59e0b, #d97706); border-radius: 2px;"></div>
+                                    </div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{pending_pct:.0f}%</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        
+                        # === Activity Log Table ===
+                        st.markdown('<div class="activity-section">', unsafe_allow_html=True)
+                        st.markdown('<div class="activity-header">📋 Activity Log</div>', unsafe_allow_html=True)
+                        
+                        # Build activity table data
+                        activity_rows = []
                         for r in group["recipients"]:
+                            # Determine delivery status
                             if r["hardBounces"] > 0 or r["blocked"] > 0:
-                                status = "❌ Failed"
+                                delivery_status = "Failed"
                             elif r["softBounces"] > 0 or r["deferred"] > 0:
-                                status = "⚠️ Delayed"
-                            elif r["clicks"] > 0:
-                                status = "✅ Clicked"
-                            elif r["opened"] > 0:
-                                status = "📖 Opened"
+                                delivery_status = "Delayed"
                             elif r["delivered"] > 0:
-                                status = "📧 Delivered"
+                                delivery_status = "Delivered"
                             else:
-                                status = "⏳ Pending"
-                            rows.append(
-                                {
-                                    "Status": status,
-                                    "Email": r["email"],
-                                    "Delivered": "✓" if r["delivered"] > 0 else "",
-                                    "Opened": f"{r['opened']}x" if r["opened"] > 0 else "",
-                                    "Clicked": f"{r['clicks']}x" if r["clicks"] > 0 else "",
-                                }
-                            )
-                        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=400)
+                                delivery_status = "Pending"
+                            
+                            # Format timestamp
+                            timestamp_str = r["last_event_date"]
+                            if timestamp_str and timestamp_str != "N/A":
+                                try:
+                                    if "T" in timestamp_str or "+" in timestamp_str or "Z" in timestamp_str:
+                                        ts = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                                    else:
+                                        ts = datetime.fromtimestamp(float(timestamp_str))
+                                    timestamp_str = ts.strftime("%Y-%m-%d %H:%M")
+                                except Exception:
+                                    pass
+                            
+                            activity_rows.append({
+                                "Recipient": r["email"],
+                                "Delivery Status": delivery_status,
+                                "Delivered": "✓" if r["delivered"] > 0 else "",
+                                "Read": "✓" if r["opened"] > 0 else "",
+                                "Clicked": "✓" if r["clicks"] > 0 else "",
+                                "Timestamp": timestamp_str
+                            })
+                        
+                        # Display table in a container - auto-size based on number of rows
+                        # Calculate appropriate height: header (38px) + rows (35px each) + padding
+                        num_rows = len(activity_rows)
+                        table_height = min(38 + (num_rows * 35) + 10, 600)  # Max 600px
+                        
+                        st.markdown('<div class="activity-table-container">', unsafe_allow_html=True)
+                        st.dataframe(
+                            pd.DataFrame(activity_rows),
+                            use_container_width=True,
+                            hide_index=True,
+                            height=table_height
+                        )
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)  # Close activity-section
+                        st.markdown('</div>', unsafe_allow_html=True)  # Close main-panel
                     else:
-                        st.info(_t("👈 Select a campaign from the list to view details"))
+                        st.info(_t("👈 Select a campaign from the sidebar to view details"))
 
             with tab2:
                 st.markdown("### " + _t("Download Report"))
