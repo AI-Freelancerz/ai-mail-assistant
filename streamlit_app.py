@@ -175,7 +175,7 @@ def init_state():
         st.session_state.contact_issues = []
         st.session_state.attachments = [] # Stores UploadedFile objects
         st.session_state.email_sending_status = []
-        st.session_state.sending_summary = {'total_contacts':0, 'successful':0, 'failed':0}
+        st.session_state.sending_summary = {'total_contacts':0, 'successful':0, 'failed':0, 'duplicates_removed':0}
         st.session_state.detailed_response = None
         st.session_state.generation_in_progress = False
         st.session_state.sending_in_progress = False
@@ -435,6 +435,9 @@ def send_all_emails():
     st.session_state.sending_in_progress = True
     total_contacts = len(st.session_state.contacts)
     logging.info(f"Total contacts to process: {total_contacts}")
+    
+    # Clear previous progress messages from any prior sends
+    st.session_state.email_sending_progress = []
 
     # ADD LOADING SPINNER FOR EMAIL SENDING
     with st.spinner(_t("Preparing and sending emails... This may take several minutes for large lists.")):
@@ -544,34 +547,64 @@ def send_all_emails():
                         "body": body_with_buttons
                     })
 
-                logging.info(f"Prepared {len(messages)} email messages for sending")
-                 # Send all at once
+                logging.info(f"Prepared {len(messages)} email messages for sending (from {total_contacts} uploaded contacts)")
+                
+                # Initialize progress tracking in session state
+                if 'email_sending_progress' not in st.session_state:
+                    st.session_state.email_sending_progress = []
+                
+                def progress_callback(current, total, message):
+                    """Callback to track progress during sending"""
+                    st.session_state.email_sending_progress.append(
+                        f"[{current}/{total}] {message}"
+                    )
+                    logging.info(f"[PROGRESS] {current}/{total} - {message}")
+                
+                # Send all with progress tracking
                 result = send_bulk_email_messages(
                     sender_email=SENDER_EMAIL,
                     sender_name=SENDER_EMAIL.split('@')[0].replace('.', ' ').title(),
                     messages=messages,
-                    attachments=temp_attachment_paths if temp_attachment_paths else None
+                    attachments=temp_attachment_paths if temp_attachment_paths else None,
+                    chunk_size=500,  # Conservative chunk size for reliability
+                    progress_callback=progress_callback
                 )
                 
                 logging.info(f"Email sending completed with status: {result.get('status')}")
 
                 # Build status & summary
-                status = []
+                status = st.session_state.email_sending_progress.copy()  # Start with progress messages
                 result_status = result.get("status")
                 result_message = result.get("message", "")
+                success = result.get("total_sent", 0)
+                fail = result.get("failed_count", 0)
+                duplicates_removed = result.get("duplicates_removed", 0)
+                unique_messages_count = len(messages) - duplicates_removed
 
                 if result_status == "success":
                     message_ids = result.get("message_ids", [])
-                    success = result.get("total_sent", 0) # Use the count from the email tool
-                    # Correctly calculate failed count: total messages *attempted* to be sent minus the successful ones
-                    fail = len(messages) - success
                     
-                    logging.info(f"Email sending SUCCESS: {success}/{len(messages)} emails sent successfully")
+                    if duplicates_removed > 0:
+                        logging.info(
+                            f"Email sending SUCCESS: {success} unique emails sent successfully "
+                            f"({total_contacts} contacts uploaded, {duplicates_removed} duplicates removed, "
+                            f"{unique_messages_count} unique emails sent)"
+                        )
+                    else:
+                        logging.info(f"Email sending SUCCESS: {success}/{total_contacts} emails sent successfully")
 
                     # Add detailed status information
                     status.append(_t("✅ Bulk send completed successfully!"))
-                    status.append(_t("📧 Total emails sent: {count}", count=str(success)))
-                    status.append(_t("📊 Success rate: {success}/{total} ({percentage:.1f}%)", success=success, total=len(messages), percentage=(success/len(messages)*100)))
+                    if duplicates_removed > 0:
+                        status.append(_t("📤 Contacts uploaded: {count}", count=str(total_contacts)))
+                        status.append(_t("🔄 Duplicate email addresses removed: {count}", count=str(duplicates_removed)))
+                        status.append(_t("📧 Unique emails sent: {count}", count=str(success)))
+                        status.append(_t("📊 All {unique} unique email addresses delivered successfully", unique=success))
+                    else:
+                        status.append(_t("📧 Total emails sent: {count}", count=str(success)))
+                        status.append(_t("📊 Success rate: {success}/{total} ({percentage:.1f}%)", 
+                                        success=success, total=total_contacts, 
+                                        percentage=(success/total_contacts*100) if total_contacts > 0 else 0))
 
                     # NEW: Populate st.session_state.message_details with structured data
                     st.session_state.message_details = []
@@ -598,33 +631,54 @@ def send_all_emails():
                             })
 
                     if fail > 0:
-                        status.append(f"⚠️ {fail} emails from your list were not sent due to invalid addresses or were skipped.")
+                        status.append(f"⚠️ {fail} emails failed to send. Check logs for details.")
+                        failed_emails = result.get("failed_emails", [])
+                        if failed_emails:
+                            status.append(f"Failed recipients: {', '.join(failed_emails[:10])}" + 
+                                        ("..." if len(failed_emails) > 10 else ""))
 
-                elif result_status == "partial_success":
-                    # Extract success count from message
-                    import re
-                    success_match = re.search(r'(\d+) emails sent successfully', result_message)
-                    success = int(success_match.group(1)) if success_match else 0
-                    fail = len(messages) - success
+                elif result_status == "partial":
                     logging.warning(f"Email sending PARTIAL SUCCESS: {success}/{len(messages)} emails sent - {result_message}")
                     status.append(f"⚠️ Partial success: {result_message}")
+                    if duplicates_removed > 0:
+                        status.append(_t("📤 Contacts uploaded: {count}", count=str(total_contacts)))
+                        status.append(_t("🔄 Duplicate email addresses removed: {count}", count=str(duplicates_removed)))
+                        status.append(_t("📧 Unique emails sent: {count}/{total}", count=success, total=unique_messages_count))
+                    
+                    # Still populate message details for successful sends
+                    st.session_state.message_details = []
+                    message_ids = result.get("message_ids", [])
+                    if message_ids:
+                        with st.spinner(_t("Fetching email delivery status...")):
+                            real_message_ids = [mid for mid in message_ids if not mid.startswith('unknown_id_')]
+                            email_events_initial = get_email_events(real_message_ids) if real_message_ids else {}
 
-                    # For partial success, we might not have message_ids for all,
-                    # so we'll just log the overall status.
-                    st.session_state.message_details = [] # Clear any previous details
+                        for i, msg_id in enumerate(message_ids):
+                            recipient_email = messages[i]['to_email'] if i < len(messages) else f"Recipient {i+1}"
+                            
+                            if msg_id.startswith('unknown_id_'):
+                                events = [{'event': 'sent', 'reason': 'Email sent successfully (tracking ID unavailable)', 'date': 'N/A'}]
+                            else:
+                                events = email_events_initial.get(msg_id, [])
+                            
+                            st.session_state.message_details.append({
+                                'recipient': recipient_email,
+                                'message_id': msg_id,
+                                'events': events
+                            })
 
                 else:
-                    success = 0
-                    fail = len(messages) # If the whole batch failed, all attempted messages failed.
+                    # Complete failure
                     logging.error(f"Email sending FAILED: {result_message}")
                     status.append(f"❌ Bulk send failed: {result_message}")
-                    st.session_state.message_details = [] # Clear any previous details
+                    st.session_state.message_details = []
 
                 st.session_state.email_sending_status = status
                 st.session_state.sending_summary = {
                     'total_contacts': total_contacts,
                     'successful': success,
-                    'failed': fail
+                    'failed': fail,
+                    'duplicates_removed': duplicates_removed
                 }
 
                 # Store detailed response data for the results page
@@ -633,10 +687,10 @@ def send_all_emails():
                 st.session_state.sending_in_progress = False
 
                 # Show completion message
-                if success == len(messages):
+                if result_status == "success":
                     st.success(_t("All emails sent successfully!"))
                     logging.info("All emails sent successfully!")
-                elif success > 0:
+                elif result_status == "partial":
                     st.warning(_t("Emails sent with some issues. Check the results page for details."))
                     logging.warning(f"Emails sent with issues: {success} successful, {fail} failed")
                 else:
@@ -1025,41 +1079,74 @@ def page_results():
     total = summary['total_contacts']
     successful = summary['successful']
     failed = summary['failed']
+    duplicates_removed = summary.get('duplicates_removed', 0)
+    unique_messages_count = total - duplicates_removed
 
     st.markdown("---")
-    if total > 0 and successful == total:
+    # Determine status based on actual failures, not duplicates
+    if failed == 0 and successful > 0:
         st.success(_t("All emails sent successfully!"))
-        st.write(_t("All {count} emails were sent without any issues.", count=total))
-    elif total > 0:
+        if duplicates_removed > 0:
+            st.write(_t("{unique} unique emails sent from {total} contacts ({duplicates} duplicates removed).", 
+                       unique=successful, total=total, duplicates=duplicates_removed))
+        else:
+            st.write(_t("All {count} emails were sent without any issues.", count=total))
+    elif failed > 0 and successful > 0:
         st.warning(_t("Sending complete with errors."))
         st.write(_t("Some emails failed to send. Please check the log below for details."))
+    elif failed > 0 and successful == 0:
+        st.error(_t("All emails failed to send."))
+        st.write(_t("Please check the configuration and logs below."))
     else:
         st.info(_t("No emails were processed."))
     st.markdown("---")
 
     # Colored metrics instead of st.metric
-    col1, col2, col3 = st.columns(3)
+    # Use 4 columns if duplicates exist, otherwise 3
+    if duplicates_removed > 0:
+        col1, col2, col3, col4 = st.columns(4)
+    else:
+        col1, col2, col3 = st.columns(3)
+    
     with col1:
         colored_metric(
-            _t("Total Contacts Processed"),
+            _t("Total Contacts Uploaded"),
             f"{total}",
             label_color="#334155",    # slate-700
             value_color="#2563eb",    # blue-600
         )
     with col2:
         colored_metric(
-            _t("Emails Sent Successfully"),
+            _t("Unique Emails Sent"),
             f"{successful}",
             label_color="#166534",    # green-800
             value_color="#22c55e",    # green-500
         )
-    with col3:
-        colored_metric(
-            _t("Emails Failed to Send"),
-            f"{failed}",
-            label_color="#991b1b",    # red-800
-            value_color="#ef4444",    # red-500
-        )
+    
+    # Show duplicates removed between sent and failed
+    if duplicates_removed > 0:
+        with col3:
+            colored_metric(
+                _t("🔄 Duplicates Removed"),
+                f"{duplicates_removed}",
+                label_color="#92400e",    # amber-800
+                value_color="#f59e0b",    # amber-500
+            )
+        with col4:
+            colored_metric(
+                _t("Emails Failed"),
+                f"{failed}",
+                label_color="#991b1b",    # red-800
+                value_color="#ef4444",    # red-500
+            )
+    else:
+        with col3:
+            colored_metric(
+                _t("Emails Failed"),
+                f"{failed}",
+                label_color="#991b1b",    # red-800
+                value_color="#ef4444",    # red-500
+            )
     
     st.markdown("---")
     # Drawer: Delivery details (per-message statuses) + logs, opened by default

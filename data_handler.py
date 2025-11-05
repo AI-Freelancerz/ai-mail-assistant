@@ -37,17 +37,21 @@ def load_contacts_from_excel(file_path):
         for col in df.columns:
             # Convert column to string type to handle mixed types gracefully
             col_series = df[col].astype(str).dropna() # Drop NaN/empty strings for accurate percentage
+            
+            # Remove spaces from values before checking pattern (to match processing logic)
+            col_series_cleaned = col_series.str.replace(' ', '', regex=False).str.lower()
 
             # Define a more robust email pattern for content-based detection
             # This regex checks for something@something.domain
             email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
             
             # Count how many non-empty cells contain an email-like pattern
-            email_like_count = col_series.str.contains(email_pattern, regex=True, na=False).sum()
+            email_like_count = col_series_cleaned.str.contains(email_pattern, regex=True, na=False).sum()
             
             # Consider a column an email column if a significant percentage (e.g., > 50%) of its values look like emails
-            if len(col_series) > 0 and (email_like_count / len(col_series)) >= 0.5: # 50% threshold for confidence
+            if len(col_series_cleaned) > 0 and (email_like_count / len(col_series_cleaned)) >= 0.5: # 50% threshold for confidence
                 email_col_name = col
+                logging.info(f"[DATA_HANDLER] Detected email column '{col}' based on content pattern ({email_like_count}/{len(col_series_cleaned)} matches)")
                 break # Found a strong candidate, take the first one encountered
 
     if not email_col_name:
@@ -82,8 +86,9 @@ def load_contacts_from_excel(file_path):
 
     for index, row in df.iterrows():
         # Get email using the identified column, defaulting to empty string if not found or NaN
-        # *** MODIFIED LINE HERE ***
-        email = str(row[email_col_name]).strip().lower().replace(" ", "") if pd.notna(row[email_col_name]) else ''
+        # Normalize: strip whitespace, lowercase, remove internal spaces
+        raw_email = str(row[email_col_name]) if pd.notna(row[email_col_name]) else ''
+        email = raw_email.strip().lower().replace(" ", "")
         
         # Get name using the identified column, defaulting to "Contact X" if not found or NaN
         if name_col_name and pd.notna(row.get(name_col_name)):
@@ -91,9 +96,8 @@ def load_contacts_from_excel(file_path):
         else:
             name = f"Contact {index + 1}" # Fallback if no name column or name is missing
 
-        # Basic email validation: must not be empty and must contain '@' and match basic regex pattern
-        # This will catch most obvious invalid formats, but not non-existent addresses
-        if email and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+        # Enhanced email validation on normalized email
+        if email and _is_valid_email(email):
             contacts.append({"name": name, "email": email})
         else:
             # Log issues including the name detected, even if it's a fallback "Contact X"
@@ -101,3 +105,54 @@ def load_contacts_from_excel(file_path):
 
     logging.info(f"[DATA_HANDLER] Processing complete - {len(contacts)} valid contacts, {len(contact_issues)} issues")
     return contacts, contact_issues
+
+
+def _is_valid_email(email: str) -> bool:
+    """
+    Enhanced email validation with better pattern matching and additional checks.
+    
+    Args:
+        email: Email address string to validate
+        
+    Returns:
+        True if email is valid, False otherwise
+    """
+    if not email or not isinstance(email, str):
+        return False
+    
+    # Basic format check
+    if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+        return False
+    
+    # Additional checks for common issues
+    # 1. No spaces in email
+    if ' ' in email:
+        return False
+    
+    # 2. Must have exactly one @ symbol
+    if email.count('@') != 1:
+        return False
+    
+    # 3. Local part (before @) and domain part (after @) must not be empty
+    local_part, domain_part = email.split('@')
+    if not local_part or not domain_part:
+        return False
+    
+    # 4. Domain must have at least one dot
+    if '.' not in domain_part:
+        return False
+    
+    # 5. No consecutive dots
+    if '..' in email:
+        return False
+    
+    # 6. Must not start or end with a dot
+    if email.startswith('.') or email.endswith('.'):
+        return False
+    
+    # 7. Domain extension must be at least 2 characters
+    domain_extension = domain_part.split('.')[-1]
+    if len(domain_extension) < 2:
+        return False
+    
+    return True
