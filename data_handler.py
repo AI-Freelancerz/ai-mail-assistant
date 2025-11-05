@@ -37,17 +37,21 @@ def load_contacts_from_excel(file_path):
         for col in df.columns:
             # Convert column to string type to handle mixed types gracefully
             col_series = df[col].astype(str).dropna() # Drop NaN/empty strings for accurate percentage
+            
+            # Remove spaces from values before checking pattern (to match processing logic)
+            col_series_cleaned = col_series.str.replace(' ', '', regex=False).str.lower()
 
             # Define a more robust email pattern for content-based detection
             # This regex checks for something@something.domain
             email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
             
             # Count how many non-empty cells contain an email-like pattern
-            email_like_count = col_series.str.contains(email_pattern, regex=True, na=False).sum()
+            email_like_count = col_series_cleaned.str.contains(email_pattern, regex=True, na=False).sum()
             
             # Consider a column an email column if a significant percentage (e.g., > 50%) of its values look like emails
-            if len(col_series) > 0 and (email_like_count / len(col_series)) >= 0.5: # 50% threshold for confidence
+            if len(col_series_cleaned) > 0 and (email_like_count / len(col_series_cleaned)) >= 0.5: # 50% threshold for confidence
                 email_col_name = col
+                logging.info(f"[DATA_HANDLER] Detected email column '{col}' based on content pattern ({email_like_count}/{len(col_series_cleaned)} matches)")
                 break # Found a strong candidate, take the first one encountered
 
     if not email_col_name:
