@@ -4,6 +4,7 @@ import openai
 import json
 import re
 import os
+import logging
 from config import OPENAI_API_KEY
 
 class SmartEmailAgent:
@@ -71,6 +72,8 @@ class SmartEmailAgent:
         if user_email_context:
             user_message_content += f"\nAdditional context/style: {user_email_context}"
 
+        logging.info(f"[EMAIL_AGENT] Generating email template with OpenAI (model: {self.model}, language: {output_language})")
+        
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -81,13 +84,18 @@ class SmartEmailAgent:
                 response_format={"type": "json_object"}
             )
             
+            logging.info("[EMAIL_AGENT] Received response from OpenAI")
+            
             # Extract content and parse JSON
             response_content = response.choices[0].message.content
             email_template = json.loads(response_content)
 
             # Basic validation
             if "subject" not in email_template or "body" not in email_template:
+                logging.error("[EMAIL_AGENT] AI response missing required keys")
                 raise ValueError("AI response missing 'subject' or 'body' key.")
+            
+            logging.info(f"[EMAIL_AGENT] Email template generated successfully - Subject: {email_template['subject'][:50]}...")
             
             # REMOVED the regex cleaning of salutations from here.
             email_template['body'] = email_template['body'].strip()
@@ -95,12 +103,16 @@ class SmartEmailAgent:
             return email_template
 
         except json.JSONDecodeError as e:
+            logging.error(f"[EMAIL_AGENT] JSON decode error: {e}")
             return {"subject": "Error", "body": f"Failed to parse AI response (JSON error): {e}. Raw: {response_content}"}
         except ValueError as e:
+            logging.error(f"[EMAIL_AGENT] Validation error: {e}")
             return {"subject": "Error", "body": f"AI response validation error: {e}. Raw: {response_content}"}
         except openai.APIError as e:
+            logging.error(f"[EMAIL_AGENT] OpenAI API Error: {e}")
             return {"subject": "Error", "body": f"OpenAI API Error: {e}"}
         except Exception as e:
+            logging.error(f"[EMAIL_AGENT] Unexpected error: {e}", exc_info=True)
             return {"subject": "Error", "body": f"An unexpected error occurred: {e}"}
 
 

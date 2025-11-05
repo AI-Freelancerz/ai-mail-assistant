@@ -3,6 +3,8 @@ import os
 import base64
 import json
 import time
+import logging
+import warnings
 
 # Import Brevo SDK
 import brevo_python as sib_api_v3_sdk
@@ -112,7 +114,10 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
     Returns:
         Dictionary with status, message_ids, total_sent, and failed_count
     """
+    logging.info(f"[EMAIL_TOOL] Starting bulk email send for {len(messages)} messages")
+    
     if not messages:
+        logging.warning("[EMAIL_TOOL] No messages provided for sending")
         return {'status': 'error', 'message': 'No messages provided'}
 
     total_messages = len(messages)
@@ -123,6 +128,7 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
     # Process attachments once for all chunks
     attachment_list = []
     if attachments:
+        logging.info(f"[EMAIL_TOOL] Processing {len(attachments)} attachment(s)")
         for path in attachments:
             try:
                 with open(path, 'rb') as f:
@@ -142,6 +148,7 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
     # Chunk the messages and process each chunk
     for i in range(0, total_messages, chunk_size):
         chunk = messages[i:i + chunk_size]
+        logging.info(f"[EMAIL_TOOL] Processing chunk {i//chunk_size + 1}: messages {i} to {i+len(chunk)}")
         
         configuration = sib_api_v3_sdk.Configuration()
         configuration.api_key['api-key'] = BREVO_API_KEY
@@ -182,9 +189,11 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
             
             all_message_ids.extend(message_ids_from_response)
             successful_sends += len(message_ids_from_response)
+            logging.info(f"[EMAIL_TOOL] Chunk sent successfully: {len(message_ids_from_response)} emails")
             
         except ApiException as e:
             err = e.body if hasattr(e, 'body') else str(e)
+            logging.error(f"[EMAIL_TOOL] Chunk send failed (messages {i} to {i+len(chunk)}): {err}")
             _log_failed_email_to_file(sender_email, "Bulk Send", "Batch Send Failed", f"Batch from {i} to {i+len(chunk)}", err)
             failed_sends += len(chunk)
             
@@ -197,6 +206,7 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
             time.sleep(1.0)  # 1 second delay between chunks
 
     # At the end, return a consolidated response
+    logging.info(f"[EMAIL_TOOL] Bulk send completed: {successful_sends} sent, {failed_sends} failed out of {total_messages}")
     return {
         'status': 'success',
         'message': f"All batches processed. {successful_sends} emails sent successfully.",

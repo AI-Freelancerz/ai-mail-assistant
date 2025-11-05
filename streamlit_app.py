@@ -11,27 +11,56 @@ from config import SENDER_EMAIL, OPENAI_API_KEY, BREVO_API_KEY, AI_MESSENGER_MOD
 from translations import LANGUAGES, _t, set_language # Assuming these exist
 import datetime
 import os
+import logging
+import warnings
 try:
     from ui_sms import render as render_sms_ui
 except Exception:
     render_sms_ui = None
 
+# --- Advanced Logging Setup for Streamlit ---
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+# Detect if running in a cloud environment like Streamlit Sharing
+IS_CLOUD_ENV = os.getenv("STREAMLIT_SHARING") == "true"
+
+if IS_CLOUD_ENV:
+    # Suppress common, harmless warnings that clutter Streamlit logs
+    warnings.filterwarnings('ignore', message='.*Connection refused.*')
+    warnings.filterwarnings('ignore', message='.*NewConnectionError.*')
+    
+    # Suppress noisy logs from underlying libraries
+    logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
+    
+    logging.info("☁️ Cloud environment detected: Applying log filters.")
+else:
+    logging.info("💻 Local environment detected: All logs and warnings enabled.")
+
 # --- NEW: Authentication Check & Early Exit ---
 # This line calls the function that renders the login form.
 # If the user is not successfully authenticated, it returns False.
+logging.info("Checking user authentication...")
 if not render_login_form():
     # If not authenticated, stop the app execution right here.
+    logging.warning("User authentication failed - stopping app execution")
     st.stop()
+logging.info("User authenticated successfully")
 
 # --- Mode gate: route to SMS-only UI when AI_MESSENGER_MODE=sms ---
+logging.info(f"Application mode: {AI_MESSENGER_MODE}")
 if AI_MESSENGER_MODE == "sms":
     if render_sms_ui is None:
         # Keep this string translated if _t is available in your imports.
+        logging.error("SMS mode enabled but ui_sms.py module is missing")
         try:
             st.error(_t("SMS mode is enabled but the SMS UI module is missing. Please ensure ui_sms.py is available."))
         except Exception:
             st.error("SMS mode is enabled but the SMS UI module is missing. Please ensure ui_sms.py is available.")
     else:
+        logging.info("Rendering SMS UI")
         render_sms_ui()
     st.stop()
 
@@ -139,6 +168,7 @@ st.set_page_config(layout="wide", page_title=_t("AI Email Assistant"))
 # --- Session State Initialization ---
 def init_state():
     if 'initialized' not in st.session_state:
+        logging.info("Initializing session state for new user session")
         st.session_state.language = 'fr'
         st.session_state.page = 'generate'
         st.session_state.contacts = []
@@ -169,6 +199,7 @@ def init_state():
         st.session_state.custom_button_url = ''
         st.session_state.custom_button_color = '#0e2fc2'  # Default blue color like the example
         st.session_state.custom_button_text_before = ''  # NEW: Text before custom button
+        logging.info("Session state initialized successfully")
         ### END NEW FEATURE ###
         
 init_state()
@@ -321,11 +352,15 @@ def generate_professional_button_html(button_text, button_url, button_color="#e5
 
 # --- Business Logic ---
 def generate_email_preview_and_template():
+    logging.info("=== Starting AI email generation ===")
     st.session_state.generation_in_progress = True
     if not OPENAI_API_KEY:
+        logging.error("OpenAI API Key not configured")
         st.error(_t("OpenAI API Key is not configured. Please set it in Streamlit secrets."))
         st.session_state.generation_in_progress = False
         return
+    
+    logging.info(f"Generation parameters - Language: {st.session_state.language}, Personalized: {st.session_state.personalize_emails}")
 
     # ADD LOADING SPINNER FOR EMAIL GENERATION
     with st.spinner(_t("Generation d'email avec l'IA... Cela peut prendre quelques instants.")):
@@ -334,6 +369,7 @@ def generate_email_preview_and_template():
 
             generate_nonpersonalized_greeting = not bool(st.session_state.generic_greeting.strip())
 
+            logging.info("Calling AI agent to generate email template...")
             template = agent.generate_email_template(
                 prompt=st.session_state.user_prompt,
                 user_email_context=st.session_state.user_email_context,
@@ -341,6 +377,8 @@ def generate_email_preview_and_template():
                 personalize_emails=st.session_state.personalize_emails,
                 generate_nonpersonalized_greeting=generate_nonpersonalized_greeting
             )
+            
+            logging.info(f"Email template generated successfully - Subject: {template['subject'][:50]}...")
 
             st.session_state.template_subject = template['subject']
             st.session_state.template_body = template['body']
@@ -350,6 +388,7 @@ def generate_email_preview_and_template():
             # Apply greeting manually only if not personalizing AND we did NOT ask the agent to add one
             if not st.session_state.personalize_emails and not generate_nonpersonalized_greeting:
                 actual_greeting = st.session_state.generic_greeting if st.session_state.generic_greeting else _t("Valued Customer")
+                logging.info(f"Adding generic greeting: {actual_greeting}")
                 st.session_state.editable_body = _add_greeting_to_body(
                     st.session_state.editable_body,
                     actual_greeting,
@@ -363,9 +402,11 @@ def generate_email_preview_and_template():
 
             # Show success message
             st.success(_t("Email template generated successfully!"))
+            logging.info("Email generation completed successfully")
             st.rerun()
 
         except Exception as e:
+            logging.error(f"Exception during email generation: {str(e)}", exc_info=True)
             st.session_state.generation_in_progress = False
             st.error(_t("Failed to generate email template: ") + str(e))
             
@@ -390,8 +431,10 @@ def refresh_message_events(message_id, message_index):
 
 
 def send_all_emails():
+    logging.info("=== Starting email sending process ===")
     st.session_state.sending_in_progress = True
     total_contacts = len(st.session_state.contacts)
+    logging.info(f"Total contacts to process: {total_contacts}")
 
     # ADD LOADING SPINNER FOR EMAIL SENDING
     with st.spinner(_t("Preparing and sending emails... This may take several minutes for large lists.")):
@@ -404,6 +447,8 @@ def send_all_emails():
                     with open(path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
                     temp_attachment_paths.append(path)
+                
+                logging.info(f"Prepared {len(temp_attachment_paths)} attachment(s)")
 
                 # Build the list of message dicts
                 messages = []
@@ -500,6 +545,7 @@ def send_all_emails():
                         "body": body_with_buttons
                     })
 
+                logging.info(f"Prepared {len(messages)} email messages for sending")
                  # Send all at once
                 result = send_bulk_email_messages(
                     sender_email=SENDER_EMAIL,
@@ -507,6 +553,8 @@ def send_all_emails():
                     messages=messages,
                     attachments=temp_attachment_paths if temp_attachment_paths else None
                 )
+                
+                logging.info(f"Email sending completed with status: {result.get('status')}")
 
                 # Build status & summary
                 status = []
@@ -518,6 +566,8 @@ def send_all_emails():
                     success = result.get("total_sent", 0) # Use the count from the email tool
                     # Correctly calculate failed count: total messages *attempted* to be sent minus the successful ones
                     fail = len(messages) - success
+                    
+                    logging.info(f"Email sending SUCCESS: {success}/{len(messages)} emails sent successfully")
 
                     # Add detailed status information
                     status.append(_t("✅ Bulk send completed successfully!"))
@@ -557,6 +607,7 @@ def send_all_emails():
                     success_match = re.search(r'(\d+) emails sent successfully', result_message)
                     success = int(success_match.group(1)) if success_match else 0
                     fail = len(messages) - success
+                    logging.warning(f"Email sending PARTIAL SUCCESS: {success}/{len(messages)} emails sent - {result_message}")
                     status.append(f"⚠️ Partial success: {result_message}")
 
                     # For partial success, we might not have message_ids for all,
@@ -566,6 +617,7 @@ def send_all_emails():
                 else:
                     success = 0
                     fail = len(messages) # If the whole batch failed, all attempted messages failed.
+                    logging.error(f"Email sending FAILED: {result_message}")
                     status.append(f"❌ Bulk send failed: {result_message}")
                     st.session_state.message_details = [] # Clear any previous details
 
@@ -584,13 +636,17 @@ def send_all_emails():
                 # Show completion message
                 if success == len(messages):
                     st.success(_t("All emails sent successfully!"))
+                    logging.info("All emails sent successfully!")
                 elif success > 0:
                     st.warning(_t("Emails sent with some issues. Check the results page for details."))
+                    logging.warning(f"Emails sent with issues: {success} successful, {fail} failed")
                 else:
                     st.error(_t("Email sending failed. Please check the configuration and try again."))
+                    logging.error("All email sending attempts failed")
                 st.rerun()
 
         except Exception as e:
+            logging.error(f"Exception during email sending: {str(e)}", exc_info=True)
             st.session_state.sending_in_progress = False
             st.error(_t("An unexpected error occurred: ") + str(e))
             st.rerun()
@@ -619,6 +675,7 @@ def page_generate():
        (st.session_state.uploaded_file_name is None or \
         st.session_state.uploaded_file_name != uploaded_file.name):
         
+        logging.info(f"Processing uploaded file: {uploaded_file.name}")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_file:
             shutil.copyfileobj(uploaded_file, tmp_file)
             st.session_state.uploaded_file_path = tmp_file.name # Store path for access
@@ -628,6 +685,8 @@ def page_generate():
         st.session_state.contacts = contacts
         st.session_state.contact_issues = issues
         st.session_state.show_generation_section = True # Show the AI generation form
+        
+        logging.info(f"Loaded {len(contacts)} valid contacts with {len(issues)} issues")
         
         if issues:
             st.warning(_t("WARNING: Some contacts had issues (e.g., missing/invalid/duplicate emails). They will be skipped."))
@@ -650,6 +709,7 @@ def page_generate():
             st.success(_t("Successfully loaded {count} valid contacts.", count=len(contacts)))
         else:
             st.error(_t("No valid contacts found in the Excel file."))
+            logging.warning("No valid contacts found in uploaded file")
             st.session_state.show_generation_section = False # Hide generation if no contacts
 
     # Moved this block to only show if no file has been successfully uploaded yet,
@@ -1067,6 +1127,7 @@ def page_results():
 
 
 # --- Main Navigation ---
+logging.info(f"Rendering page: {st.session_state.page}")
 if st.session_state.page == 'generate':
     page_generate()
 elif st.session_state.page == 'preview':

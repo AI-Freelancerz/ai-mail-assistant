@@ -1,16 +1,20 @@
 # data_handler.py
 import pandas as pd
 import re # Import regex for more robust email pattern checking
+import logging
 
 def load_contacts_from_excel(file_path):
     """
     Loads contacts from an Excel file, dynamically identifies 'email' and 'name' columns,
     and returns a list of dictionaries with 'name' and 'email' keys.
     """
+    logging.info(f"[DATA_HANDLER] Loading contacts from Excel file: {file_path}")
     try:
         df = pd.read_excel(file_path)
+        logging.info(f"[DATA_HANDLER] Excel file loaded successfully - {len(df)} rows found")
     except Exception as e:
         # Catch errors if the file is not a valid Excel or unreadable
+        logging.error(f"[DATA_HANDLER] Error reading Excel file: {e}")
         return [], [f"Error reading Excel file: {e}. Please ensure it's a valid .xlsx or .xls file."]
 
     # Standardize column names to lowercase for easier internal handling
@@ -48,8 +52,10 @@ def load_contacts_from_excel(file_path):
 
     if not email_col_name:
         # If still no email column found, return an error message
+        logging.warning("[DATA_HANDLER] Could not find email column in Excel file")
         return [], ["Could not find a suitable 'Email' column. Please ensure your Excel has a column with email addresses (e.g., 'Email', 'Mail', 'Courriel') or that most entries contain an '@' symbol and a domain."]
 
+    logging.info(f"[DATA_HANDLER] Email column identified: {email_col_name}")
 
     # --- Strategy for Name Column Detection ---
     # Prioritize common 'name' spellings in English and French
@@ -65,6 +71,8 @@ def load_contacts_from_excel(file_path):
             if col != email_col_name:
                 name_col_name = col
                 break
+    
+    logging.info(f"[DATA_HANDLER] Name column identified: {name_col_name if name_col_name else 'None (using fallback)'}")
     
     # If still no name column found (e.g., only email column exists), we will use a fallback name below
     
@@ -91,4 +99,5 @@ def load_contacts_from_excel(file_path):
             # Log issues including the name detected, even if it's a fallback "Contact X"
             contact_issues.append(f"Row {index + 2}: Invalid or missing email for '{name}' (Email: '{email}').") # +2 for header row and 0-indexing
 
+    logging.info(f"[DATA_HANDLER] Processing complete - {len(contacts)} valid contacts, {len(contact_issues)} issues")
     return contacts, contact_issues
