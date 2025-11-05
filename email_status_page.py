@@ -233,21 +233,47 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
             with tab1:
                 st.markdown("### " + _t("Email Campaigns"))
 
-                # Create two columns: list view and detail sidebar
+                # Sort campaigns by date (newest first)
+                sorted_campaigns = sorted(
+                    grouped_data.items(),
+                    key=lambda x: x[1]["last_event_date"] if x[1]["last_event_date"] else "",
+                    reverse=True
+                )
+                
+                # Group campaigns by date
+                campaigns_by_date = {}
+                for group_key, group in sorted_campaigns:
+                    date_str = group["last_event_date"]
+                    if date_str and date_str != "N/A":
+                        try:
+                            if "T" in date_str or "+" in date_str or "Z" in date_str:
+                                dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                            else:
+                                dt = datetime.fromtimestamp(float(date_str))
+                            date_key = dt.strftime("%Y-%m-%d")
+                        except Exception:
+                            date_key = "Unknown"
+                    else:
+                        date_key = "Unknown"
+                    
+                    if date_key not in campaigns_by_date:
+                        campaigns_by_date[date_key] = []
+                    campaigns_by_date[date_key].append((group_key, group))
+
+                # Create two columns: vertical tab list and detail view
                 list_col, detail_col = st.columns([2, 3])
 
                 with list_col:
-                    # Create a simple clickable list of campaigns
-                    campaign_keys = list(grouped_data.keys())
+                    # Initialize selection to first campaign if not set
+                    if st.session_state.selected_campaign not in grouped_data:
+                        if sorted_campaigns:
+                            st.session_state.selected_campaign = sorted_campaigns[0][0]
                     
-                    if campaign_keys:
-                        # Initialize selection if not set
-                        if st.session_state.selected_campaign not in campaign_keys:
-                            st.session_state.selected_campaign = campaign_keys[0]
+                    # Display campaigns grouped by date
+                    for date_key in sorted(campaigns_by_date.keys(), reverse=True):
+                        st.markdown(f"**📅 {date_key}**")
                         
-                        # Display each campaign as a clickable button
-                        for group_key in campaign_keys:
-                            group = grouped_data[group_key]
+                        for group_key, group in campaigns_by_date[date_key]:
                             is_selected = st.session_state.selected_campaign == group_key
                             
                             # Create button with full subject
@@ -259,14 +285,14 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
                             ):
                                 st.session_state.selected_campaign = group_key
                                 st.rerun()
+                        
+                        st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
 
                 with detail_col:
-                    # Display selected campaign details in sidebar
+                    # Display selected campaign details
                     if st.session_state.selected_campaign and st.session_state.selected_campaign in grouped_data:
                         group = grouped_data[st.session_state.selected_campaign]
                         group_key = st.session_state.selected_campaign
-                        
-                        st.markdown(f"<div class='sidebar-detail'>", unsafe_allow_html=True)
                         
                         # Format date
                         date_str = group["last_event_date"]
@@ -280,48 +306,59 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
                             except Exception:
                                 pass
                         
-                        # Campaign metrics
-                        delivery_rate = f"{(group['total_delivered']/group['total_sent']*100):.0f}%" if group["total_sent"] > 0 else "0%"
-                        open_rate = f"{(group['total_opened']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
-                        click_rate = f"{(group['total_clicks']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
+                        # Calculate metrics
+                        bounced = group["total_hardBounces"] + group["total_softBounces"]
+                        pending = group["total_sent"] - group["total_delivered"] - bounced
                         
-                        # Show quick stats at the top
-                        st.markdown(f"**🎯 {group['total_sent']} recipients | ✅ {delivery_rate} delivered | 📖 {open_rate} opened | 🔗 {click_rate} clicked**")
+                        # Status tiles
+                        st.markdown(f"### {group['subject']}")
+                        st.caption(f"🕐 {date_str} · Batch: `{group_key}`" + (f" · Tag: {group['tag']}" if group['tag'] else ""))
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric(
+                                label="📧 Sent",
+                                value=group["total_sent"],
+                                delta=None
+                            )
+                        with col2:
+                            st.metric(
+                                label="✅ Delivered",
+                                value=group["total_delivered"],
+                                delta=f"{(group['total_delivered']/group['total_sent']*100):.0f}%" if group["total_sent"] > 0 else "0%"
+                            )
+                        with col3:
+                            st.metric(
+                                label="❌ Failed",
+                                value=bounced,
+                                delta=f"{(bounced/group['total_sent']*100):.0f}%" if group["total_sent"] > 0 else "0%",
+                                delta_color="inverse"
+                            )
+                        with col4:
+                            st.metric(
+                                label="⏳ Pending",
+                                value=pending,
+                                delta=None
+                            )
+                        
+                        col5, col6 = st.columns(2)
+                        with col5:
+                            st.metric(
+                                label="📖 Opened",
+                                value=f"{group['total_opened']}",
+                                delta=f"{(group['total_opened']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
+                            )
+                        with col6:
+                            st.metric(
+                                label="🔗 Clicked",
+                                value=f"{group['total_clicks']}",
+                                delta=f"{(group['total_clicks']/group['total_delivered']*100):.0f}%" if group["total_delivered"] > 0 else "0%"
+                            )
+                        
                         st.markdown("---")
                         
-                        st.markdown("#### " + _t("Campaign Metrics"))
-                        c1, c2, c3 = st.columns(3)
-                        with c1:
-                            st.metric(_t("Sent"), group["total_sent"])
-                            st.metric(_t("Delivered"), f"{group['total_delivered']}")
-                        with c2:
-                            st.metric(_t("Opened"), f"{group['total_opened']}")
-                            st.metric(_t("Clicked"), f"{group['total_clicks']}")
-                        with c3:
-                            bounced = group["total_hardBounces"] + group["total_softBounces"]
-                            st.metric(_t("Bounced"), bounced)
-                            st.metric(_t("Last Activity"), date_str if date_str != "N/A" else "-")
-                        
-                        st.markdown("#### " + _t("Rates"))
-                        rate_c1, rate_c2, rate_c3 = st.columns(3)
-                        with rate_c1:
-                            st.metric(_t("Delivery Rate"), delivery_rate)
-                        with rate_c2:
-                            st.metric(_t("Open Rate"), open_rate)
-                        with rate_c3:
-                            st.metric(_t("Click Rate"), click_rate)
-                        
-                        st.markdown("---")
-                        
-                        # Campaign info
-                        st.markdown(f"**Batch ID:** `{group_key}`")
-                        if group["tag"]:
-                            st.markdown(f"**Tag:** {group['tag']}")
-                        
-                        st.markdown("---")
-                        st.markdown("#### " + _t("Recipients"))
-                        
-                        # Recipients table
+                        # Recipients status table
+                        st.markdown("#### " + _t("Recipient Status"))
                         rows = []
                         for r in group["recipients"]:
                             if r["hardBounces"] > 0 or r["blocked"] > 0:
@@ -346,9 +383,8 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
                                 }
                             )
                         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=400)
-                        st.markdown("</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"**🎯 Select a campaign tab to view details**")
+                        st.info(_t("👈 Select a campaign from the list to view details"))
 
             with tab2:
                 st.markdown("### " + _t("Download Report"))
