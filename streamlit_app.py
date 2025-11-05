@@ -544,7 +544,7 @@ def send_all_emails():
                         "body": body_with_buttons
                     })
 
-                logging.info(f"Prepared {len(messages)} email messages for sending")
+                logging.info(f"Prepared {len(messages)} email messages for sending (from {total_contacts} uploaded contacts)")
                 
                 # Initialize progress tracking in session state
                 if 'email_sending_progress' not in st.session_state:
@@ -576,20 +576,32 @@ def send_all_emails():
                 success = result.get("total_sent", 0)
                 fail = result.get("failed_count", 0)
                 duplicates_removed = result.get("duplicates_removed", 0)
+                unique_messages_count = len(messages) - duplicates_removed
 
                 if result_status == "success":
                     message_ids = result.get("message_ids", [])
                     
-                    logging.info(f"Email sending SUCCESS: {success}/{len(messages)} emails sent successfully")
+                    if duplicates_removed > 0:
+                        logging.info(
+                            f"Email sending SUCCESS: {success} unique emails sent successfully "
+                            f"({total_contacts} contacts uploaded, {duplicates_removed} duplicates removed, "
+                            f"{unique_messages_count} unique emails sent)"
+                        )
+                    else:
+                        logging.info(f"Email sending SUCCESS: {success}/{total_contacts} emails sent successfully")
 
                     # Add detailed status information
                     status.append(_t("✅ Bulk send completed successfully!"))
                     if duplicates_removed > 0:
-                        status.append(_t("� Removed {count} duplicate email addresses", count=str(duplicates_removed)))
-                    status.append(_t("�📧 Total emails sent: {count}", count=str(success)))
-                    status.append(_t("📊 Success rate: {success}/{total} ({percentage:.1f}%)", 
-                                    success=success, total=len(messages), 
-                                    percentage=(success/len(messages)*100) if len(messages) > 0 else 0))
+                        status.append(_t("📤 Contacts uploaded: {count}", count=str(total_contacts)))
+                        status.append(_t("🔄 Duplicate email addresses removed: {count}", count=str(duplicates_removed)))
+                        status.append(_t("📧 Unique emails sent: {count}", count=str(success)))
+                        status.append(_t("📊 All {unique} unique email addresses delivered successfully", unique=success))
+                    else:
+                        status.append(_t("📧 Total emails sent: {count}", count=str(success)))
+                        status.append(_t("📊 Success rate: {success}/{total} ({percentage:.1f}%)", 
+                                        success=success, total=total_contacts, 
+                                        percentage=(success/total_contacts*100) if total_contacts > 0 else 0))
 
                     # NEW: Populate st.session_state.message_details with structured data
                     st.session_state.message_details = []
@@ -626,7 +638,9 @@ def send_all_emails():
                     logging.warning(f"Email sending PARTIAL SUCCESS: {success}/{len(messages)} emails sent - {result_message}")
                     status.append(f"⚠️ Partial success: {result_message}")
                     if duplicates_removed > 0:
-                        status.append(_t("🔄 Removed {count} duplicate email addresses", count=str(duplicates_removed)))
+                        status.append(_t("📤 Contacts uploaded: {count}", count=str(total_contacts)))
+                        status.append(_t("🔄 Duplicate email addresses removed: {count}", count=str(duplicates_removed)))
+                        status.append(_t("📧 Unique emails sent: {count}/{total}", count=success, total=unique_messages_count))
                     
                     # Still populate message details for successful sends
                     st.session_state.message_details = []
