@@ -162,6 +162,14 @@ def _build_message_versions(messages):
         subject = msg.get('subject', '')
         body = msg.get('body', '')
         html_body = body.replace('\n', '<br>')
+        
+        # Enhanced logging to track what's being built (defensive slicing)
+        logging.debug(f"[EMAIL_TOOL] Building version {i+1}: to={(to_email or '')}, subject='{(subject or '')[:50]}...', body_len={len(body or '')}")
+        
+        if not subject:
+            logging.warning(f"[EMAIL_TOOL] Message {i+1} has empty subject for {to_email}")
+        if not body:
+            logging.warning(f"[EMAIL_TOOL] Message {i+1} has empty body for {to_email}")
 
         # Create nested SDK model objects
         to_obj = sib_api_v3_sdk.SendSmtpEmailTo(email=to_email, name=to_name)
@@ -171,7 +179,8 @@ def _build_message_versions(messages):
             html_content=html_body
         )
         versions.append(version_obj)
-
+    
+    logging.info(f"[EMAIL_TOOL] Built {len(versions)} message versions")
     return versions
 
 
@@ -257,6 +266,7 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
         sender_email: Sender's email address
         sender_name: Sender's display name  
         messages: List of message dictionaries with keys 'to_email', 'to_name', 'subject', 'body'
+                  Each message MUST have a 'subject' and 'body' key for personalization
         attachments: Optional list of attachment file paths
         chunk_size: Maximum messages per API call (default DEFAULT_CHUNK_SIZE)
         progress_callback: Optional callback function(current, total, message) for progress updates
@@ -308,6 +318,8 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
                             f"Removed {duplicates_removed} duplicate email addresses")
     
     total_messages = len(unique_messages)
+    logging.info(f"[EMAIL_TOOL] Total unique messages to send: {total_messages}")
+    
     successful_sends = 0
     failed_sends = 0
     all_message_ids = []
@@ -318,14 +330,12 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
     if attachments:
         logging.info(f"[EMAIL_TOOL] Processing {len(attachments)} attachment(s)")
         attachment_list = _process_attachments(attachments, sender_email)
-    
-    # Use first message as global default for sender, subject, and body
-    first = unique_messages[0]
-    global_html = first.get('body', '').replace('\n', '<br>')
-    global_subject = first.get('subject', '')
+        logging.info(f"[EMAIL_TOOL] Successfully processed {len(attachment_list)} attachment(s)")
     
     # Chunk the messages and process each chunk
+    # Note: Each message has its own subject and body for personalization
     total_chunks = (total_messages + chunk_size - 1) // chunk_size
+    logging.info(f"[EMAIL_TOOL] Splitting into {total_chunks} chunk(s) of max {chunk_size} messages each")
     
     for chunk_idx in range(0, total_messages, chunk_size):
         chunk = unique_messages[chunk_idx:chunk_idx + chunk_size]
@@ -338,10 +348,9 @@ def send_bulk_email_messages(sender_email, sender_name, messages, attachments=No
                             f"Processing chunk {chunk_num}/{total_chunks}...")
         
         try:
-            # Send chunk with retry logic
+            # Send chunk with retry logic (each message has its own subject/body)
             chunk_result = _send_email_chunk_with_retry(
-                sender_email, sender_name, chunk, global_subject, 
-                global_html, attachment_list
+                sender_email, sender_name, chunk, attachment_list
             )
             
             # Process successful sends
@@ -486,30 +495,42 @@ def _process_attachments(attachments: List[str], sender_email: str) -> List[Dict
 
 @retry_with_exponential_backoff(max_retries=MAX_RETRIES)
 def _send_email_chunk_with_retry(sender_email: str, sender_name: str, chunk: List[Dict],
-                                  global_subject: str, global_html: str, 
                                   attachment_list: List[Dict]) -> Dict:
     """
     Send a chunk of emails with retry logic applied.
+    Each message in the chunk has its own personalized subject and body.
     
     Args:
         sender_email: Sender's email address
         sender_name: Sender's display name
-        chunk: List of message dictionaries
-        global_subject: Default subject line
-        global_html: Default HTML body
+        chunk: List of message dictionaries (each with 'subject', 'body', 'to_email', 'to_name')
         attachment_list: List of processed attachments
         
     Returns:
         Dictionary with 'message_ids' list
     """
+    # Safety guard: prevent IndexError if called with empty chunk
+    if not chunk or len(chunk) == 0:
+        logging.warning("[EMAIL_TOOL] _send_email_chunk_with_retry called with empty chunk, skipping")
+        return {'message_ids': []}
+    
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key['api-key'] = BREVO_API_KEY
     api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
     
-    # Build versions for the current chunk
+    # Build versions for the current chunk (each with its own subject/body)
     versions = _build_message_versions(chunk)
     
+    # Extract first message as global fallback (required by Brevo API even when using message_versions)
+    # Each message_version will override these with its own subject/html_content
+    first_msg = chunk[0]
+    global_subject = first_msg.get('subject', 'No Subject')
+    global_html = first_msg.get('body', '').replace('\n', '<br>')
+    
+    logging.info(f"[EMAIL_TOOL] Sending chunk with {len(chunk)} messages, global subject: '{(global_subject or 'No Subject')[:50]}...'")
+    
     # Build batch request
+    # Note: Brevo requires global subject/html_content as fallbacks even when using message_versions
     batch_args = {
         'sender': {'email': sender_email, 'name': sender_name},
         'subject': global_subject,
@@ -520,16 +541,40 @@ def _send_email_chunk_with_retry(sender_email: str, sender_name: str, chunk: Lis
     # Only add attachments if present
     if attachment_list and len(attachment_list) > 0:
         batch_args['attachment'] = attachment_list
+        logging.info(f"[EMAIL_TOOL] Adding {len(attachment_list)} attachment(s) to chunk")
     
     # Rate limiting before API call
     time.sleep(RATE_LIMIT_DELAY)
     
-    response = api.send_transac_email(sib_api_v3_sdk.SendSmtpEmail(**batch_args))
+    logging.debug(f"[EMAIL_TOOL] Calling Brevo API with sender={sender_email}, {len(versions)} versions")
     
-    # Extract message IDs from response
-    message_ids = _extract_message_ids(response, len(chunk))
-    
-    return {'message_ids': message_ids}
+    try:
+        response = api.send_transac_email(sib_api_v3_sdk.SendSmtpEmail(**batch_args))
+        
+        # Extract message IDs from response
+        message_ids = _extract_message_ids(response, len(chunk))
+        logging.info(f"[EMAIL_TOOL] Chunk sent successfully, received {len(message_ids)} message IDs")
+        
+        return {'message_ids': message_ids}
+        
+    except ApiException as e:
+        # Log full context before re-raising for retry logic
+        recipient_list = [msg['to_email'] for msg in chunk]
+        logging.error(
+            f"[EMAIL_TOOL] API call failed for chunk with {len(chunk)} recipients: {recipient_list[:5]}... "
+            f"Status: {getattr(e, 'status', 'unknown')}, Body: {getattr(e, 'body', str(e))}"
+        )
+        raise  # Re-raise to trigger retry logic
+        
+    except Exception as e:
+        # Log unexpected errors with full context
+        recipient_list = [msg['to_email'] for msg in chunk]
+        logging.error(
+            f"[EMAIL_TOOL] Unexpected error sending chunk to {len(chunk)} recipients: {recipient_list[:5]}... "
+            f"Error: {type(e).__name__}: {str(e)}", 
+            exc_info=True
+        )
+        raise  # Re-raise to trigger retry logic
 
 
 def _extract_message_ids(response, expected_count: int) -> List[str]:

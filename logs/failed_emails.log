@@ -7,3 +7,11 @@ Error: {"code":"missing_parameter","message":"attachment is missing"}
 Body Snippet: Batch from 0 to 2...
 --------------------------------------------------
 
+Timestamp: 2025-11-05 16:31:20
+Sender: asso.migdal@migdal-france.org
+Recipient: Bulk Send
+Subject: Batch Send Failed
+Error: Permanent error (HTTP 400): subject is required
+Body Snippet: Chunk 1 (messages 0 to 2)...
+--------------------------------------------------
+
