@@ -75,8 +75,9 @@ class BrevoStatusClient:
                     # Non-retryable error, raise immediately
                     raise
         
-        # Should never reach here, but just in case
-        raise Exception(f"Failed after {max_retries} retries")
+        # This should be unreachable, but if somehow we get here, raise the last exception
+        logger.error(f"Unexpected: retry loop completed without return or exception after {max_retries} attempts")
+        raise ApiException(status=500, reason="Retry loop exhausted without proper exception handling")
         
     def get_email_events(
         self,
@@ -185,8 +186,8 @@ class BrevoStatusClient:
                     if isinstance(error_body, dict) and 'message' in error_body:
                         error_msg += f" - {error_body['message']}"
                     logger.error(f"Error body: {error_body}")
-                except:
-                    logger.error(f"Error body: {e.body}")
+                except (ValueError, TypeError, json.JSONDecodeError) as parse_error:
+                    logger.error(f"Error body (unparsed): {e.body}")
             
             logger.error(error_msg)
             

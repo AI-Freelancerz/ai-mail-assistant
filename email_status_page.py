@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import logging
 import os
 import re
+from brevo_python.rest import ApiException
 
 from brevo_status_client import BrevoStatusClient
 from translations import _t, set_language
@@ -36,6 +37,12 @@ def main():
         st.session_state.status_page_limit = 50
     if "selected_campaign" not in st.session_state:
         st.session_state.selected_campaign = None
+    if "exclude_filters" not in st.session_state:
+        st.session_state.exclude_filters = ""
+    if "include_filters" not in st.session_state:
+        st.session_state.include_filters = ""
+    if "time_filter" not in st.session_state:
+        st.session_state.time_filter = "7days"  # Default to 7 days
 
     # Apply language from main app if available
     if "language" in st.session_state:
@@ -291,16 +298,68 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # Header with Refresh button
-    col_title, col_refresh = st.columns([5, 1])
-    with col_title:
-        st.title("📧 " + _t("Email Status Dashboard"))
-        st.markdown(_t("View latest email activity from Brevo. Data is fetched live on each refresh."))
-    with col_refresh:
-        st.markdown("<br>", unsafe_allow_html=True)  # Add spacing to align with title
-        if st.button(_t("🔄 Refresh Data"), type="primary", use_container_width=True, key="refresh_top"):
-            st.session_state.status_page_offset = 0
+    # Header
+    st.title("📧 " + _t("Email Status Dashboard"))
+    st.markdown(_t("View latest email activity from Brevo. Data is fetched live on each refresh."))
+    
+    # Time range filter
+    time_filter_col1, time_filter_col2 = st.columns([3, 1])
+    with time_filter_col1:
+        time_options = {
+            "24h": _t("Last 24 hours"),
+            "48h": _t("Last 48 hours"),
+            "7days": _t("Last 7 days")
+        }
+        selected_time = st.radio(
+            _t("Time Range"),
+            options=list(time_options.keys()),
+            format_func=lambda x: time_options[x],
+            horizontal=True,
+            key="time_filter_radio",
+            index=list(time_options.keys()).index(st.session_state.time_filter)
+        )
+        if selected_time != st.session_state.time_filter:
+            st.session_state.time_filter = selected_time
             st.rerun()
+
+    # --- NEW: View Options for Filtering ---
+    with st.expander(_t("⚙️ View Options & Filters")):
+        st.info(_t("Exclude test emails or filter to specific campaigns. This does not delete any data."))
+        
+        col_exclude, col_include = st.columns(2)
+        
+        with col_exclude:
+            st.markdown("**" + _t("Exclusion Filter") + "**")
+            new_exclude_filters = st.text_area(
+                _t("Exclude items containing:"),
+                value=st.session_state.exclude_filters,
+                placeholder=_t("e.g., @mycompany.com, test@example.com, [TEST]"),
+                help=_t("Enter comma-separated email addresses, domains, or subject keywords to exclude."),
+                key="exclude_input"
+            )
+        
+        with col_include:
+            st.markdown("**" + _t("Inclusion Filter") + "**")
+            new_include_filters = st.text_area(
+                _t("Include only items containing:"),
+                value=st.session_state.include_filters,
+                placeholder=_t("e.g., [PROD], newsletter, @client.com"),
+                help=_t("Enter comma-separated email addresses, domains, or subject keywords. Only matching items will be shown."),
+                key="include_input"
+            )
+
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            if st.button(_t("Apply Filters"), use_container_width=True, type="primary"):
+                st.session_state.exclude_filters = new_exclude_filters
+                st.session_state.include_filters = new_include_filters
+                st.rerun()
+        with filter_col2:
+            if st.button(_t("Clear Filters"), use_container_width=True):
+                st.session_state.exclude_filters = ""
+                st.session_state.include_filters = ""
+                st.rerun()
+    # --- END NEW ---
 
     # Check for Brevo API key with better validation
     if not BREVO_API_KEY or BREVO_API_KEY.strip() == "":
@@ -352,8 +411,14 @@ def main():
         logger.error(f"Failed to initialize BrevoStatusClient: {str(e)}", exc_info=True)
         st.stop()
 
-    # Set date range and filters
-    start_date = datetime.now() - timedelta(days=7)
+    # Set date range based on time filter
+    if st.session_state.time_filter == "24h":
+        start_date = datetime.now() - timedelta(hours=24)
+    elif st.session_state.time_filter == "48h":
+        start_date = datetime.now() - timedelta(hours=48)
+    else:  # 7days
+        start_date = datetime.now() - timedelta(days=7)
+    
     end_date = datetime.now()
     limit = 100
     event_filter = None
@@ -371,6 +436,60 @@ def main():
                 event=event_filter,
                 sort="desc",
             )
+
+        # --- NEW: Filter out excluded events ---
+        if st.session_state.exclude_filters or st.session_state.include_filters:
+            excluded_count = 0
+            included_count = 0
+            original_count = len(events)
+            
+            # Parse filters from the text areas
+            exclude_filters = [f.strip().lower() for f in st.session_state.exclude_filters.split(',') if f.strip()]
+            include_filters = [f.strip().lower() for f in st.session_state.include_filters.split(',') if f.strip()]
+            
+            filtered_events = []
+            for event in events:
+                email_lower = event.get("email", "").lower()
+                subject_lower = event.get("subject", "").lower()
+                
+                # Check inclusion filter first (if specified, must match)
+                if include_filters:
+                    is_included = False
+                    for f in include_filters:
+                        if (f.startswith('@') and email_lower.endswith(f)) or \
+                           (f in email_lower) or \
+                           (f in subject_lower):
+                            is_included = True
+                            break
+                    
+                    if not is_included:
+                        included_count += 1
+                        continue  # Skip this event
+                
+                # Check exclusion filter
+                is_excluded = False
+                for f in exclude_filters:
+                    if (f.startswith('@') and email_lower.endswith(f)) or \
+                       (f in email_lower) or \
+                       (f in subject_lower):
+                        is_excluded = True
+                        break
+                
+                if not is_excluded:
+                    filtered_events.append(event)
+                else:
+                    excluded_count += 1
+            
+            events = filtered_events  # Overwrite with the filtered list
+            
+            if excluded_count > 0 or included_count > 0:
+                filter_msg = []
+                if excluded_count > 0:
+                    filter_msg.append(_t("Excluded: {count}", count=excluded_count))
+                if included_count > 0:
+                    filter_msg.append(_t("Filtered by inclusion: {count}", count=included_count))
+                st.toast(" | ".join(filter_msg))
+        # --- END NEW ---
 
         if events:
             st.markdown("### " + _t("Summary"))
@@ -398,42 +517,59 @@ def main():
                         "error": 0,
                         "last_event": "",
                         "last_event_date": "",
+                        "send_date": "",  # Track earliest send date for sorting
                         "click_links": [],
                     }
 
-                event_type = event["event"]
+                # Normalize event type to canonical form
+                event_type_raw = event["event"]
+                event_type_lower = event_type_raw.lower() if event_type_raw else ""
                 
-                # Count each event type explicitly
-                if event_type == "request" or event_type == "requests":
-                    email_data[msg_id]["requests"] += 1
-                elif event_type == "delivered":
-                    email_data[msg_id]["delivered"] += 1
-                elif event_type == "opened" or event_type == "open":
-                    email_data[msg_id]["opened"] += 1
-                elif event_type == "clicks" or event_type == "click":
-                    email_data[msg_id]["clicks"] += 1
-                elif event_type == "hardBounces" or event_type == "hard_bounce":
-                    email_data[msg_id]["hardBounces"] += 1
-                elif event_type == "softBounces" or event_type == "soft_bounce":
-                    email_data[msg_id]["softBounces"] += 1
-                elif event_type == "blocked":
-                    email_data[msg_id]["blocked"] += 1
-                elif event_type == "spam":
-                    email_data[msg_id]["spam"] += 1
-                elif event_type == "deferred":
-                    email_data[msg_id]["deferred"] += 1
-                elif event_type == "unsubscribed":
-                    email_data[msg_id]["unsubscribed"] += 1
-                elif event_type == "error":
-                    email_data[msg_id]["error"] += 1
+                # Map all variations to canonical event types
+                event_type_map = {
+                    'request': 'requests',
+                    'requests': 'requests',
+                    'delivered': 'delivered',
+                    'open': 'opened',
+                    'opened': 'opened',
+                    'click': 'clicks',
+                    'clicks': 'clicks',
+                    'hard_bounce': 'hardBounces',
+                    'hardbounce': 'hardBounces',
+                    'hardbounces': 'hardBounces',
+                    'soft_bounce': 'softBounces',
+                    'softbounce': 'softBounces',
+                    'softbounces': 'softBounces',
+                    'blocked': 'blocked',
+                    'spam': 'spam',
+                    'deferred': 'deferred',
+                    'unsubscribed': 'unsubscribed',
+                    'unsubscribe': 'unsubscribed',
+                    'error': 'error',
+                }
+                
+                event_type = event_type_map.get(event_type_lower, event_type_raw)
+                
+                # Count each event type
+                if event_type in email_data[msg_id]:
+                    email_data[msg_id][event_type] += 1
 
-                # Track most recent event
-                if not email_data[msg_id]["last_event_date"] or event["date"] > email_data[msg_id]["last_event_date"]:
-                    email_data[msg_id]["last_event"] = event_type
-                    email_data[msg_id]["last_event_date"] = event["date"]
+                # Track most recent event - compare dates safely
+                current_date = event["date"]
+                last_date = email_data[msg_id]["last_event_date"]
+                
+                # Update if this is the first event or if current is newer
+                if not last_date or (current_date and current_date > last_date):
+                    email_data[msg_id]["last_event"] = event_type_raw
+                    email_data[msg_id]["last_event_date"] = current_date
+                
+                # Track earliest send date (request or delivered events)
+                if event_type in ('requests', 'delivered'):
+                    if not email_data[msg_id]["send_date"] or (current_date and current_date < email_data[msg_id]["send_date"]):
+                        email_data[msg_id]["send_date"] = current_date
 
                 # Track clicked links
-                if (event_type == "clicks" or event_type == "click") and event.get("link"):
+                if event_type == "clicks" and event.get("link"):
                     email_data[msg_id]["click_links"].append(event["link"])
 
             # Always group by message batch
@@ -456,6 +592,7 @@ def main():
                         "total_spam": 0,
                         "total_deferred": 0,
                         "last_event_date": "",
+                        "send_date": "",  # Earliest send date for this campaign
                     }
 
                 grouped_data[group_key]["recipients"].append(data)
@@ -469,11 +606,17 @@ def main():
                 grouped_data[group_key]["total_spam"] += 1 if data["spam"] > 0 else 0
                 grouped_data[group_key]["total_deferred"] += 1 if data["deferred"] > 0 else 0
 
+                # Update last event date
                 if data["last_event_date"] and (
                     not grouped_data[group_key]["last_event_date"]
                     or data["last_event_date"] > grouped_data[group_key]["last_event_date"]
                 ):
                     grouped_data[group_key]["last_event_date"] = data["last_event_date"]
+                
+                # Update send date (earliest)
+                if data["send_date"]:
+                    if not grouped_data[group_key]["send_date"] or data["send_date"] < grouped_data[group_key]["send_date"]:
+                        grouped_data[group_key]["send_date"] = data["send_date"]
 
             # Overall metrics
             total_emails = len(email_data)
@@ -484,33 +627,84 @@ def main():
 
             col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
-                st.metric(_t("Total Recipients"), total_emails)
+                st.markdown(
+                    f"""
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem;">📧</div>
+                        <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Total Recipients")}</div>
+                        <div style="font-size: 1.75rem; font-weight: 700;">{total_emails}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             with col2:
                 delivery_rate = f"{(total_delivered/total_emails*100):.1f}%" if total_emails > 0 else "N/A"
-                st.metric(_t("Delivered"), f"{total_delivered} ({delivery_rate})")
+                st.markdown(
+                    f"""
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem;">✅</div>
+                        <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Delivered")}</div>
+                        <div style="font-size: 1.75rem; font-weight: 700;">{total_delivered}</div>
+                        <div style="font-size: 0.75rem; color: #10b981; margin-top: 0.25rem;">{delivery_rate}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             with col3:
                 open_rate = f"{(total_opened/total_delivered*100):.1f}%" if total_delivered > 0 else "N/A"
-                st.metric(_t("Opened"), f"{total_opened} ({open_rate})")
+                st.markdown(
+                    f"""
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem;">📖</div>
+                        <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Opened")}</div>
+                        <div style="font-size: 1.75rem; font-weight: 700;">{total_opened}</div>
+                        <div style="font-size: 0.75rem; color: #10b981; margin-top: 0.25rem;">{open_rate}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             with col4:
                 click_rate = f"{(total_clicked/total_delivered*100):.1f}%" if total_delivered > 0 else "N/A"
-                st.metric(_t("Clicked"), f"{total_clicked} ({click_rate})")
+                st.markdown(
+                    f"""
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem;">🔗</div>
+                        <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Clicked")}</div>
+                        <div style="font-size: 1.75rem; font-weight: 700;">{total_clicked}</div>
+                        <div style="font-size: 0.75rem; color: #3b82f6; margin-top: 0.25rem;">{click_rate}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             with col5:
                 bounce_rate = f"{(total_bounced/total_emails*100):.1f}%" if total_emails > 0 else "N/A"
-                st.metric(_t("Bounced"), f"{total_bounced} ({bounce_rate})")
+                st.markdown(
+                    f"""
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem;">❌</div>
+                        <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Bounced")}</div>
+                        <div style="font-size: 1.75rem; font-weight: 700;">{total_bounced}</div>
+                        <div style="font-size: 0.75rem; color: #ef4444; margin-top: 0.25rem;">{bounce_rate}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
             st.markdown("---")
 
-            # Sort campaigns by date (newest first)
+            # Sort campaigns by send date (newest first)
+            # Use send_date (earliest send time) instead of last_event_date for proper chronological order
             sorted_campaigns = sorted(
                 grouped_data.items(),
-                key=lambda x: x[1]["last_event_date"] if x[1]["last_event_date"] else "",
+                key=lambda x: x[1]["send_date"] if x[1]["send_date"] else x[1]["last_event_date"] if x[1]["last_event_date"] else "",
                 reverse=True
             )
             
             # Group campaigns by date
             campaigns_by_date = {}
             for group_key, group in sorted_campaigns:
-                date_str = group["last_event_date"]
+                # Use send_date if available, fallback to last_event_date
+                date_str = group["send_date"] if group["send_date"] else group["last_event_date"]
                 if date_str and date_str != "N/A":
                     try:
                         if "T" in date_str or "+" in date_str or "Z" in date_str:
@@ -567,8 +761,13 @@ def main():
                         
                         st.markdown('<div class="main-panel">', unsafe_allow_html=True)
                         
-                        # === Campaign Title & Metadata ===
-                        st.markdown(f'<div class="campaign-title">{group["subject"]}</div>', unsafe_allow_html=True)
+                        # === Campaign Title & Metadata with Refresh Button ===
+                        title_col, refresh_col = st.columns([10, 1])
+                        with title_col:
+                            st.markdown(f'<div class="campaign-title">{group["subject"]}</div>', unsafe_allow_html=True)
+                        with refresh_col:
+                            if st.button("🔄", key=f"refresh_{group_key}", help=_t("Refresh Data"), type="primary"):
+                                st.rerun()
                         
                         # Format timestamp
                         date_str = group["last_event_date"]
@@ -602,7 +801,7 @@ def main():
                         opened_pct = (group['total_opened']/group['total_delivered']*100) if group['total_delivered'] > 0 else 0
                         pending_pct = (pending/group['total_sent']*100) if group['total_sent'] > 0 else 0
                         
-                        # Create 5 columns for KPI tiles
+                        # Create 5 columns for KPI tiles (all aligned)
                         kpi_cols = st.columns(5)
                         
                         # Sent KPI
@@ -708,24 +907,24 @@ def main():
                         
                         # Add explanation about tracking
                         with st.expander(_t("ℹ️ Understanding email tracking")):
-                            st.markdown("""
-                            **How email tracking works:**
-                            - **Delivered**: Email successfully reached the recipient's inbox
-                            - **Read (Opened)**: Recipient opened the email and loaded images (tracking pixel)
-                            - **Clicked**: Recipient clicked a link in the email
+                            st.markdown(f"""
+                            **{_t("How email tracking works:")}**
+                            - **{_t("Delivered: Email successfully reached the recipient's inbox")}**
+                            - **{_t("Read (Opened): Recipient opened the email and loaded images (tracking pixel)")}**
+                            - **{_t("Clicked: Recipient clicked a link in the email")}**
                             
-                            **Why you might see "Clicked" without "Read":**
-                            - Recipient has images disabled/blocked in their email client
-                            - Recipient clicked a link from email preview without fully opening
-                            - Some email clients block tracking pixels but allow link clicks
+                            **{_t('Why you might see "Clicked" without "Read":')}**
+                            - {_t("Recipient has images disabled/blocked in their email client")}
+                            - {_t("Recipient clicked a link from email preview without fully opening")}
+                            - {_t("Some email clients block tracking pixels but allow link clicks")}
                             
-                            **This is normal and indicates engagement even without open tracking!**
+                            **{_t("This is normal and indicates engagement even without open tracking!")}**
                             """)
                         
-                        # Add debug toggle
-                        show_debug = st.checkbox(_t("🔍 Show debug info"), value=False, key=f"debug_{group_key}")
-                        
                         # Build activity table data
+                        # First, check if we should show debug info (will be set by checkbox below table)
+                        show_debug = st.session_state.get(f"debug_{group_key}", False)
+                        
                         activity_rows = []
                         for r in group["recipients"]:
                             # Determine delivery status with improved logic
@@ -815,6 +1014,17 @@ def main():
                             height=table_height
                         )
                         st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        # Add debug toggle below the table
+                        if st.checkbox(_t("🔍 Show debug info"), value=show_debug, key=f"debug_checkbox_{group_key}"):
+                            if not show_debug:
+                                st.session_state[f"debug_{group_key}"] = True
+                                st.rerun()
+                        else:
+                            if show_debug:
+                                st.session_state[f"debug_{group_key}"] = False
+                                st.rerun()
+                        
                         st.markdown('</div>', unsafe_allow_html=True)  # Close activity-section
                         st.markdown('</div>', unsafe_allow_html=True)  # Close main-panel
                     else:
@@ -878,11 +1088,56 @@ def main():
             st.info(_t("No email events found for the selected time range and filters."))
             st.markdown(_t("Try adjusting your filters or time range."))
 
-    except Exception as e:
+    except ApiException as e:
+        # Handle Brevo API exceptions with structured error checking
         error_message = str(e)
+        status_code = e.status if hasattr(e, 'status') else None
         
-        # Categorize error for better user feedback
-        if "Rate limit" in error_message or "429" in error_message:
+        # Categorize error by HTTP status code (more reliable than substring matching)
+        if status_code == 429:
+            st.error("⚠️ " + _t("Rate limit exceeded. Please wait a moment and try again."))
+            st.info(_t("Brevo API has rate limits. The system will automatically retry with exponential backoff."))
+        elif status_code in (401, 403):
+            st.error("🔑 " + _t("Authentication error. Please check your Brevo API key."))
+            st.warning(_t("Your API key may be invalid or may not have the required permissions."))
+        elif status_code == 404:
+            st.error("❓ " + _t("Resource not found. The requested data may not exist."))
+        else:
+            st.error("❌ " + _t("Error fetching email events: ") + error_message)
+        
+        logger.error(f"Brevo API error in email status page: HTTP {status_code} - {error_message}", exc_info=True)
+        
+        # Show detailed debug info
+        with st.expander(_t("🔍 Debug Information")):
+            st.markdown("**" + _t("Error Type:") + "** ApiException")
+            if status_code:
+                st.markdown(f"**HTTP Status:** {status_code}")
+            st.code(error_message)
+            
+            # Show potential solutions
+            st.markdown("**" + _t("Possible Solutions:") + "**")
+            if status_code == 429:
+                st.markdown("- Wait 1-2 minutes before retrying")
+                st.markdown("- Reduce the frequency of requests")
+                st.markdown("- Contact Brevo support to increase your rate limit")
+            elif status_code in (401, 403):
+                st.markdown("- Verify your API key in Brevo dashboard")
+                st.markdown("- Ensure the API key has 'Email Campaigns' permissions")
+                st.markdown("- Check if the API key is correctly configured in secrets/config")
+            else:
+                st.markdown("- Check your internet connection")
+                st.markdown("- Try refreshing the page")
+                st.markdown("- Contact support if the issue persists")
+    
+    except Exception as e:
+        # Handle unexpected errors with fallback to substring matching
+        error_message = str(e)
+        error_type = type(e).__name__
+        
+        # Fallback categorization for non-API exceptions
+        if "timeout" in error_message.lower():
+            st.error("⏱️ " + _t("Request timed out. Please try again."))
+        elif "Rate limit" in error_message or "429" in error_message:
             st.error("⚠️ " + _t("Rate limit exceeded. Please wait a moment and try again."))
             st.info(_t("Brevo API has rate limits. The system will automatically retry with exponential backoff."))
         elif "API key" in error_message or "401" in error_message or "403" in error_message:
@@ -890,12 +1145,10 @@ def main():
             st.warning(_t("Your API key may be invalid or may not have the required permissions."))
         elif "404" in error_message:
             st.error("❓ " + _t("Resource not found. The requested data may not exist."))
-        elif "timeout" in error_message.lower():
-            st.error("⏱️ " + _t("Request timed out. Please try again."))
         else:
             st.error("❌ " + _t("Error fetching email events: ") + error_message)
         
-        logger.error(f"Error in email status page: {error_message}", exc_info=True)
+        logger.error(f"Unexpected error in email status page: {error_type} - {error_message}", exc_info=True)
         
         # Show detailed debug info
         with st.expander(_t("🔍 Debug Information")):
