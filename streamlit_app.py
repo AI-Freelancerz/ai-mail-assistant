@@ -488,8 +488,8 @@ def send_all_emails():
                     full_button_html += f"""<div style="text-align: center;">"""
                 
                 full_button_html += f"""
-                    <p style="margin: 5px 0; font-size: 14px;">{donate_text_above}</p>
-                    <br>{donate_button_html}
+                    <p style="margin: 5px 0 10px 0; font-size: 14px;">{donate_text_above}</p>
+                    {donate_button_html}
                 """
                 
                 #full_button_html += "</div>" # Close the centered div
@@ -527,15 +527,15 @@ def send_all_emails():
                     unsubscribe_url = f"{GOOGLE_FORM_UNSUBSCRIBE_URL_TEMPLATE}{email}"
                     # NEW: Footer HTML with unsubscribe and association info
                     footer_html = f"""
-                        <br><br>
-                        <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
+                        <br>
+                        <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 10px;">
                             <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
                             <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
                         </div>
                     """
 
                     # Append the footer and button HTML to the end of the email body
-                    body_with_buttons = f"{body}<br>{full_button_html}<br>{footer_html}"
+                    body_with_buttons = f"{body}<br><br><br>{full_button_html}{footer_html}"
                     
                     messages.append({
                         "to_email": email,
@@ -942,8 +942,8 @@ def page_preview():
                     full_button_html += f"""<div style="text-align: center;">"""
                 
                 full_button_html += f"""
-                    <p style="margin: 5px 0; font-size: 14px;">{donate_text_above}</p>
-                    <br>{donate_button_html}
+                    <p style="margin: 5px 0 10px 0; font-size: 14px;">{donate_text_above}</p>
+                    {donate_button_html}
                 """
                 
                 full_button_html += "</div>" # Close the centered div
@@ -955,8 +955,8 @@ def page_preview():
                 
                 # NEW: Footer HTML with unsubscribe and association info
                 footer_html = f"""
-                    <br><br>
-                    <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 20px;">
+                    <br>
+                    <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 10px;">
                         <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
                         <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
                     </div>
