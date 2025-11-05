@@ -1,8 +1,9 @@
 # CHANGELOG
+# - v0.3 (2025-11-05): Add email sending configuration parameters for reliability improvements.
 # - v0.2 (2025-09-01): Add AI_MESSENGER_MODE env gate ("email" default; "sms" enables SMS-only UI).
 # - v0.1: Consolidated secrets access and log path.
 
-# config.py - Consolidated Secrets Access and Log Path
+# config.py - Consolidated Secrets Access and Configuration
 
 import streamlit as st
 
@@ -30,3 +31,25 @@ ANDROID_SMS_GATEWAY_PASSWORD = APP_CREDENTIALS.get("ANDROID_SMS_GATEWAY_PASSWORD
 # --- LOGGING CONFIGURATION ---
 # Path for logging failed email attempts. This is not a secret.
 FAILED_EMAILS_LOG_PATH = "logs/failed_emails.log" # This path will be created in your app's root directory on Streamlit Cloud
+
+# --- EMAIL SENDING CONFIGURATION ---
+# These parameters control the reliability and performance of email sending
+# Can be overridden in Streamlit secrets for production tuning
+
+# Retry configuration
+EMAIL_MAX_RETRIES = int(APP_CREDENTIALS.get("EMAIL_MAX_RETRIES", 3))
+EMAIL_INITIAL_RETRY_DELAY = float(APP_CREDENTIALS.get("EMAIL_INITIAL_RETRY_DELAY", 2.0))  # seconds
+EMAIL_MAX_RETRY_DELAY = float(APP_CREDENTIALS.get("EMAIL_MAX_RETRY_DELAY", 60.0))  # seconds
+
+# Rate limiting configuration
+EMAIL_RATE_LIMIT_DELAY = float(APP_CREDENTIALS.get("EMAIL_RATE_LIMIT_DELAY", 0.1))  # seconds between API calls
+EMAIL_CHUNK_DELAY = float(APP_CREDENTIALS.get("EMAIL_CHUNK_DELAY", 1.0))  # seconds between chunks
+
+# Batch size configuration
+# Conservative default of 500 (Brevo allows up to 2000)
+# Lower values = more reliable, better error isolation, slower overall
+# Higher values = faster, but one error affects more emails
+EMAIL_DEFAULT_CHUNK_SIZE = int(APP_CREDENTIALS.get("EMAIL_DEFAULT_CHUNK_SIZE", 500))
+
+# Attachment configuration
+EMAIL_MAX_ATTACHMENT_SIZE_MB = int(APP_CREDENTIALS.get("EMAIL_MAX_ATTACHMENT_SIZE_MB", 10))  # MB per attachment

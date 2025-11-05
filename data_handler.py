@@ -91,9 +91,8 @@ def load_contacts_from_excel(file_path):
         else:
             name = f"Contact {index + 1}" # Fallback if no name column or name is missing
 
-        # Basic email validation: must not be empty and must contain '@' and match basic regex pattern
-        # This will catch most obvious invalid formats, but not non-existent addresses
-        if email and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+        # Enhanced email validation
+        if email and _is_valid_email(email):
             contacts.append({"name": name, "email": email})
         else:
             # Log issues including the name detected, even if it's a fallback "Contact X"
@@ -101,3 +100,54 @@ def load_contacts_from_excel(file_path):
 
     logging.info(f"[DATA_HANDLER] Processing complete - {len(contacts)} valid contacts, {len(contact_issues)} issues")
     return contacts, contact_issues
+
+
+def _is_valid_email(email: str) -> bool:
+    """
+    Enhanced email validation with better pattern matching and additional checks.
+    
+    Args:
+        email: Email address string to validate
+        
+    Returns:
+        True if email is valid, False otherwise
+    """
+    if not email or not isinstance(email, str):
+        return False
+    
+    # Basic format check
+    if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+        return False
+    
+    # Additional checks for common issues
+    # 1. No spaces in email
+    if ' ' in email:
+        return False
+    
+    # 2. Must have exactly one @ symbol
+    if email.count('@') != 1:
+        return False
+    
+    # 3. Local part (before @) and domain part (after @) must not be empty
+    local_part, domain_part = email.split('@')
+    if not local_part or not domain_part:
+        return False
+    
+    # 4. Domain must have at least one dot
+    if '.' not in domain_part:
+        return False
+    
+    # 5. No consecutive dots
+    if '..' in email:
+        return False
+    
+    # 6. Must not start or end with a dot
+    if email.startswith('.') or email.endswith('.'):
+        return False
+    
+    # 7. Domain extension must be at least 2 characters
+    domain_extension = domain_part.split('.')[-1]
+    if len(domain_extension) < 2:
+        return False
+    
+    return True
