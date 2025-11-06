@@ -1185,22 +1185,32 @@ def page_results():
             )
     
     st.markdown("---")
-    if st.button(_t("Start New Email Session"), use_container_width=True, key="start_new_session_button", type="primary"):
-        # Clear all relevant session state variables
-        keys_to_clear = [
-            'initialized', 'language', 'page', 'contacts', 'contact_issues', 
-            'attachments', 'email_sending_status', 'sending_summary', 'detailed_response',
-            'generation_in_progress', 'sending_in_progress', 'user_prompt', 
-            'user_email_context', 'personalize_emails', 'generic_greeting', 
-            'template_subject', 'template_body', 'editable_subject', 'editable_body',
-            'uploaded_file_name', 'show_generation_section', 'email_generated',
-            'message_details' # NEW: Clear message_details
-        ]
-        for k in keys_to_clear:
-            if k in st.session_state:
-                del st.session_state[k]
-        init_state() # Re-initialize to default states
-        st.rerun() # Force a rerun to restart the app
+    
+    # Create two columns for the buttons
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        if st.button(_t("Start New Email Session"), use_container_width=True, key="start_new_session_button", type="primary"):
+            # Clear all relevant session state variables
+            keys_to_clear = [
+                'initialized', 'language', 'page', 'contacts', 'contact_issues', 
+                'attachments', 'email_sending_status', 'sending_summary', 'detailed_response',
+                'generation_in_progress', 'sending_in_progress', 'user_prompt', 
+                'user_email_context', 'personalize_emails', 'generic_greeting', 
+                'template_subject', 'template_body', 'editable_subject', 'editable_body',
+                'uploaded_file_name', 'show_generation_section', 'email_generated',
+                'message_details' # NEW: Clear message_details
+            ]
+            for k in keys_to_clear:
+                if k in st.session_state:
+                    del st.session_state[k]
+            init_state() # Re-initialize to default states
+            st.rerun() # Force a rerun to restart the app
+    
+    with col_right:
+        if st.button(_t("📊 View Dashboard"), use_container_width=True, key="view_dashboard_button", type="secondary"):
+            st.session_state.page = 'email_status'
+            st.rerun()
 
 
 # --- Main Navigation ---

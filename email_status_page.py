@@ -441,28 +441,78 @@ def main():
     end_date = now_utc
     api_end_date = end_date.replace(tzinfo=None)
     
-    limit = 100
+    # Adjust limit based on time range to ensure we fetch all events
+    # Brevo API maximum is 500 events per request
+    if st.session_state.time_filter == "1h":
+        limit = 100  # 1 hour, 100 should be enough
+    elif st.session_state.time_filter == "24h":
+        limit = 300  # 24 hours, need more
+    elif st.session_state.time_filter == "48h":
+        limit = 500  # 48 hours, need even more (API max)
+    elif st.session_state.time_filter == "7days":
+        limit = 500  # 7 days, use API maximum
+    else:  # 3months
+        limit = 500  # 3 months, use API maximum
+    
     event_filter = None
     email_search = None
 
     # Main content
     try:
         with st.spinner(_t("Fetching email events from Brevo...")):
-            events, total = client.get_email_events(
-                limit=limit,
-                offset=st.session_state.status_page_offset,
-                start_date=api_start_date,
-                end_date=api_end_date,
-                email=email_search if email_search else None,
-                event=event_filter,
-                sort="desc",
-            )
+            # Fetch events with pagination to get all data
+            # Brevo API limit is 100 per request, so we need to paginate for longer time ranges
+            all_events = []
+            page_offset = 0
+            page_limit = 100  # Max per Brevo API
+            max_events = limit  # Total events we want
+            
+            # Keep fetching until we have enough or no more events
+            while len(all_events) < max_events:
+                events_page, total = client.get_email_events(
+                    limit=page_limit,
+                    offset=page_offset,
+                    start_date=api_start_date,
+                    end_date=api_end_date,
+                    email=email_search if email_search else None,
+                    event=event_filter,
+                    sort="desc",
+                )
+                
+                if not events_page:
+                    # No more events available
+                    break
+                
+                all_events.extend(events_page)
+                
+                # If we got fewer events than requested, we've reached the end
+                if len(events_page) < page_limit:
+                    break
+                
+                page_offset += page_limit
+                
+                # Safety check: don't fetch more than 1000 events total
+                if page_offset >= 1000:
+                    st.warning(_t("⚠️ Stopped at 1000 events to avoid excessive API calls. Use filters for more specific results."))
+                    break
+            
+            events = all_events
 
         # --- NEW: Filter events by exact time range (client-side filtering) ---
         # This is needed because Brevo API only accepts date, not datetime
-        # Also handles timezone differences properly
-        filtered_by_time = []
+        # Strategy: Filter by SEND time (request/delivered events), not by any activity
+        # Then include ALL events for those message_ids to maintain data consistency
+        
+        # Step 1: Find message_ids where the email was SENT in the time range
+        # We look for 'request' or 'delivered' events as these indicate send time
+        message_ids_in_range = set()
         for event in events:
+            event_type_raw = event.get("event", "").lower()
+            
+            # Only check send-related events (request or delivered)
+            if event_type_raw not in ['request', 'requests', 'delivered']:
+                continue
+            
             event_date_str = event.get("date", "")
             if event_date_str:
                 try:
@@ -486,19 +536,21 @@ def main():
                     if event_datetime.tzinfo is None:
                         event_datetime = event_datetime.replace(tzinfo=timezone.utc)
                     
-                    # Check if event is within our time range (both are now timezone-aware)
+                    # Check if email was sent within our time range
                     if start_date <= event_datetime <= end_date:
-                        filtered_by_time.append(event)
+                        message_ids_in_range.add(event.get("message_id"))
                 except (ValueError, AttributeError) as e:
-                    # If we can't parse the date, include the event to be safe
+                    # If we can't parse the date, include this message_id to be safe
                     logger.warning(f"Could not parse event date '{event_date_str}': {e}")
-                    filtered_by_time.append(event)
-            else:
-                # No date, include it to be safe
-                filtered_by_time.append(event)
+                    message_ids_in_range.add(event.get("message_id"))
+        
+        # Step 2: Include ALL events for message_ids that were sent in the time range
+        filtered_by_time = [event for event in events if event.get("message_id") in message_ids_in_range]
         
         # Log filtering results for debugging
-        logger.info(f"Time filter '{st.session_state.time_filter}': {len(events)} events fetched from API, {len(filtered_by_time)} events after time filtering")
+        logger.info(f"Time filter '{st.session_state.time_filter}': {len(events)} events fetched from API, "
+                   f"{len(message_ids_in_range)} unique emails sent in range, "
+                   f"{len(filtered_by_time)} total events after filtering")
         logger.info(f"Time range: {start_date.isoformat()} to {end_date.isoformat()}")
         
         events = filtered_by_time
