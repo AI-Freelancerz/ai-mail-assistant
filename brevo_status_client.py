@@ -108,6 +108,7 @@ class BrevoStatusClient:
         """
         try:
             # Format dates to ISO format if provided
+            # Brevo API only accepts date format (YYYY-MM-DD), not datetime
             start_date_str = start_date.strftime("%Y-%m-%d") if start_date else None
             end_date_str = end_date.strftime("%Y-%m-%d") if end_date else None
             

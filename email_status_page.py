@@ -5,7 +5,7 @@ Displays latest sent email activity from Brevo in a concise, stateless way.
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import os
 import re
@@ -42,7 +42,7 @@ def main():
     if "include_filters" not in st.session_state:
         st.session_state.include_filters = ""
     if "time_filter" not in st.session_state:
-        st.session_state.time_filter = "7days"  # Default to 7 days
+        st.session_state.time_filter = "1h"  # Default to last hour
 
     # Apply language from main app if available
     if "language" in st.session_state:
@@ -306,10 +306,11 @@ def main():
     time_filter_col1, time_filter_col2 = st.columns([3, 1])
     with time_filter_col1:
         time_options = {
+            "1h": _t("Last hour"),
             "24h": _t("Last 24 hours"),
             "48h": _t("Last 48 hours"),
             "7days": _t("Last 7 days"),
-            "all": _t("All")
+            "3months": _t("Last 3 months")
         }
         selected_time = st.radio(
             _t("Time Range"),
@@ -413,16 +414,33 @@ def main():
         st.stop()
 
     # Set date range based on time filter
-    if st.session_state.time_filter == "24h":
-        start_date = datetime.now() - timedelta(hours=24)
-    elif st.session_state.time_filter == "48h":
-        start_date = datetime.now() - timedelta(hours=48)
-    elif st.session_state.time_filter == "7days":
-        start_date = datetime.now() - timedelta(days=7)
-    else:  # all
-        start_date = datetime.now() - timedelta(days=365)  # Go back 1 year for "all"
+    # Use UTC timezone for proper comparison with Brevo API timestamps
+    now_utc = datetime.now(timezone.utc)
     
-    end_date = datetime.now()
+    if st.session_state.time_filter == "1h":
+        start_date = now_utc - timedelta(hours=1)
+        # For short time ranges, fetch today's and yesterday's events
+        api_start_date = (now_utc - timedelta(days=1)).replace(tzinfo=None)
+    elif st.session_state.time_filter == "24h":
+        start_date = now_utc - timedelta(hours=24)
+        # Fetch last 2 days to cover timezone differences
+        api_start_date = (now_utc - timedelta(days=2)).replace(tzinfo=None)
+    elif st.session_state.time_filter == "48h":
+        start_date = now_utc - timedelta(hours=48)
+        # Fetch last 3 days to cover timezone differences
+        api_start_date = (now_utc - timedelta(days=3)).replace(tzinfo=None)
+    elif st.session_state.time_filter == "7days":
+        start_date = now_utc - timedelta(days=7)
+        # Fetch 8 days to cover timezone differences
+        api_start_date = (now_utc - timedelta(days=8)).replace(tzinfo=None)
+    else:  # 3months
+        start_date = now_utc - timedelta(days=90)
+        # For 3 months, use exactly 90 days (Brevo's maximum)
+        api_start_date = (now_utc - timedelta(days=90)).replace(tzinfo=None)
+    
+    end_date = now_utc
+    api_end_date = end_date.replace(tzinfo=None)
+    
     limit = 100
     event_filter = None
     email_search = None
@@ -433,12 +451,58 @@ def main():
             events, total = client.get_email_events(
                 limit=limit,
                 offset=st.session_state.status_page_offset,
-                start_date=start_date,
-                end_date=end_date,
+                start_date=api_start_date,
+                end_date=api_end_date,
                 email=email_search if email_search else None,
                 event=event_filter,
                 sort="desc",
             )
+
+        # --- NEW: Filter events by exact time range (client-side filtering) ---
+        # This is needed because Brevo API only accepts date, not datetime
+        # Also handles timezone differences properly
+        filtered_by_time = []
+        for event in events:
+            event_date_str = event.get("date", "")
+            if event_date_str:
+                try:
+                    # Parse the event date - Brevo returns ISO format like "2025-11-06T14:30:45.000Z"
+                    if 'T' in event_date_str:
+                        # Parse ISO format with timezone
+                        if event_date_str.endswith('Z'):
+                            # Z means UTC
+                            event_datetime = datetime.fromisoformat(event_date_str.replace('Z', '+00:00'))
+                        elif '+' in event_date_str or event_date_str.count('-') > 2:
+                            # Has timezone offset
+                            event_datetime = datetime.fromisoformat(event_date_str)
+                        else:
+                            # No timezone, assume UTC
+                            event_datetime = datetime.fromisoformat(event_date_str).replace(tzinfo=timezone.utc)
+                    else:
+                        # If only date, assume midnight UTC
+                        event_datetime = datetime.strptime(event_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    
+                    # Ensure event_datetime has timezone info
+                    if event_datetime.tzinfo is None:
+                        event_datetime = event_datetime.replace(tzinfo=timezone.utc)
+                    
+                    # Check if event is within our time range (both are now timezone-aware)
+                    if start_date <= event_datetime <= end_date:
+                        filtered_by_time.append(event)
+                except (ValueError, AttributeError) as e:
+                    # If we can't parse the date, include the event to be safe
+                    logger.warning(f"Could not parse event date '{event_date_str}': {e}")
+                    filtered_by_time.append(event)
+            else:
+                # No date, include it to be safe
+                filtered_by_time.append(event)
+        
+        # Log filtering results for debugging
+        logger.info(f"Time filter '{st.session_state.time_filter}': {len(events)} events fetched from API, {len(filtered_by_time)} events after time filtering")
+        logger.info(f"Time range: {start_date.isoformat()} to {end_date.isoformat()}")
+        
+        events = filtered_by_time
+        # --- END NEW ---
 
         # --- NEW: Filter out excluded events ---
         if st.session_state.exclude_filters or st.session_state.include_filters:
