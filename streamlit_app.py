@@ -117,6 +117,42 @@ div.stActionButton, div.stDownloadButton, div.stFileUploadDropzone {
     border-color: #1a4fbd;
 }
 
+/* Sidebar navigation button styling */
+div[data-testid="stSidebar"] .stButton>button {
+    width: 100%;
+    height: auto;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: all 0.2s ease-in-out;
+    border: 1px solid #e5e7eb;
+    background-color: white;
+    color: #374151;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    margin-bottom: 0.5rem;
+}
+
+div[data-testid="stSidebar"] .stButton>button:hover {
+    border-color: #3b82f6;
+    background-color: #f0f9ff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Selected sidebar navigation button */
+div[data-testid="stSidebar"] .stButton button[kind="primary"] {
+    background-color: #2563eb !important;
+    color: white !important;
+    border-color: #2563eb !important;
+    font-weight: 600 !important;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3) !important;
+}
+
+div[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
+    background-color: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+}
+
 /* Minimal metric-like card styling */
 .colored-metric {
     background: white;
@@ -1149,50 +1185,6 @@ def page_results():
             )
     
     st.markdown("---")
-    # Drawer: Delivery details (per-message statuses) + logs, opened by default
-    with st.expander(_t("Show Activity Log and Errors"), expanded=False):
-        # Per-message statuses moved inside the drawer and shown expanded (no per-message expanders)
-        if st.session_state.message_details:
-            st.subheader(_t("Individual Email Status & Events"))
-            for i, msg_detail in enumerate(st.session_state.message_details):
-                with st.container(border=True):
-                    st.markdown(f"**Recipient:** `{msg_detail['recipient']}`")
-                    st.markdown(f"**Message ID:** `{msg_detail['message_id']}`")
-
-                    # Refresh button for this specific message
-                    if st.button(_t("Refresh Events for this Email"), key=f"refresh_event_{msg_detail['message_id']}_{i}"):
-                        refresh_message_events(msg_detail['message_id'], i)
-
-                    st.markdown("**Events:**")
-                    if msg_detail['events']:
-                        for event in msg_detail['events']:
-                            event_type = event.get('event', 'N/A')
-                            event_date = event.get('_date', 'N/A')
-                            reason = event.get('reason', 'N/A')
-                            st.markdown(f"- **Type:** `{event_type}` | **Date:** `{event_date}` | **Reason:** `{reason}`")
-                    else:
-                        st.info(_t("No events found yet for this message. Click 'Refresh Events' to check."))
-        else:
-            st.info(_t("No detailed message status available."))
-
-        st.markdown("---")
-        # Activity log lives inside the same drawer; no extra totals here
-        st.subheader(_t("Activity Log"))
-        log_display_container = st.container()
-        if st.session_state.email_sending_status:
-            for log_entry in st.session_state.email_sending_status:
-                if "❌" in log_entry or "error" in log_entry.lower() or "failed" in log_entry.lower():
-                    log_display_container.error(log_entry)
-                elif "✅" in log_entry or "success" in log_entry.lower():
-                    log_display_container.success(log_entry)
-                elif "📋" in log_entry or log_entry.strip().startswith("   "):  # Message ID entries
-                    log_display_container.markdown(f"```{log_entry}```")
-                elif "⚠️" in log_entry:
-                    log_display_container.warning(log_entry)
-                else:
-                    log_display_container.info(log_entry)
-
-    st.markdown("---")
     if st.button(_t("Start New Email Session"), use_container_width=True, key="start_new_session_button", type="primary"):
         # Clear all relevant session state variables
         keys_to_clear = [
@@ -1217,10 +1209,20 @@ logging.info(f"Rendering page: {st.session_state.page}")
 # Sidebar navigation
 with st.sidebar:
     st.markdown("## Navigation")
-    if st.button(_t("Generate & Send Emails"), use_container_width=True, key="nav_generate"):
+    if st.button(
+        _t("Generate & Send Emails"), 
+        use_container_width=True, 
+        key="nav_generate",
+        type="primary" if st.session_state.page == 'generate' or st.session_state.page == 'preview' or st.session_state.page == 'results' else "secondary"
+    ):
         st.session_state.page = 'generate'
         st.rerun()
-    if st.button(_t("Email Status Dashboard"), use_container_width=True, key="nav_email_status"):
+    if st.button(
+        _t("Email Status Dashboard"), 
+        use_container_width=True, 
+        key="nav_email_status",
+        type="primary" if st.session_state.page == 'email_status' else "secondary"
+    ):
         st.session_state.page = 'email_status'
         st.rerun()
 

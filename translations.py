@@ -204,8 +204,11 @@ TRANSLATIONS = {
         "Excluded: {count}": "Excluded: {count}",
         "Filtered by inclusion: {count}": "Filtered by inclusion: {count}",
         "Last 24 hours": "Last 24 hours",
+        "Last hour": "Last hour",
         "Last 48 hours": "Last 48 hours",
         "Last 7 days": "Last 7 days",
+        "Last 3 months": "Last 3 months",
+        "Generate & Send Emails": "Generate & Send Emails",
         "🔄": "🔄",
         "🔄 Refresh": "🔄 Refresh",
         # Email tracking explanation
@@ -440,8 +443,11 @@ TRANSLATIONS = {
         "Excluded: {count}": "Exclus : {count}",
         "Filtered by inclusion: {count}": "Filtrés par inclusion : {count}",
         "Last 24 hours": "Dernières 24 heures",
+        "Last hour": "Dernière heure",
         "Last 48 hours": "Dernières 48 heures",
         "Last 7 days": "7 derniers jours",
+        "Last 3 months": "3 derniers mois",
+        "Generate & Send Emails": "Générer et envoyer des e-mails",
         "🔄": "🔄",
         "🔄 Refresh": "🔄 Actualiser",
         # Email tracking explanation
