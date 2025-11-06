@@ -196,7 +196,7 @@ Supported Brevo event types:
 **Problem**: No events showing up
 - **Solution**: 
   - Check that emails have been sent through Brevo
-  - The dashboard shows events from the last 7 days by default
+  - The dashboard shows events from the last hour by default
   - Verify API key has read permissions
 
 **Problem**: Rate limit errors (429)
@@ -206,6 +206,91 @@ Supported Brevo event types:
 
 **Problem**: Import errors for `brevo_python`
 - **Solution**: Run `pip install brevo-python` or `pip install -r requirements.txt`
+
+## Testing at Scale
+
+### Mock Data for Testing (100+ Emails)
+
+To test the email status dashboard with large volumes of data without using your Brevo API quota or sending real emails, use the included mock client:
+
+#### Quick Start
+
+1. In `email_status_page.py`, find line 14:
+   ```python
+   from brevo_status_client import BrevoStatusClient
+   ```
+
+2. Replace it with:
+   ```python
+   from brevo_status_client_mock import MockBrevoStatusClient as BrevoStatusClient
+   ```
+
+3. Run the app:
+   ```bash
+   streamlit run streamlit_app.py
+   ```
+
+4. **Remember to change it back when done testing!**
+
+#### What the Mock Generates
+
+The mock client (`brevo_status_client_mock.py`) generates realistic test data:
+
+- **100+ email events** across multiple campaigns
+- **Realistic event types**: request, delivered, opened, clicked, bounced, spam, etc.
+- **Multiple batches**: Simulates 3-8 different email campaigns
+- **Event lifecycle**: Most emails follow realistic patterns (request → delivered → opened → clicked)
+- **Time distribution**: Events spread across your selected time range
+- **Proper message IDs**: Formatted like real Brevo message IDs
+- **Realistic statistics**: ~90% delivery rate, ~60% open rate, ~40% click rate
+
+#### Testing Scenarios
+
+1. **Different Time Ranges**: Select different time filters and verify statistics change
+2. **Filtering**: Test exclusion/inclusion filters
+3. **Campaign View**: Click on different campaigns and verify details
+4. **Performance**: Test UI responsiveness with 100+ events
+
+#### Benefits of Mock Testing
+
+✅ **No API quota usage** - unlimited testing  
+✅ **No real emails sent** - safe for testing  
+✅ **Instant data generation** - no waiting  
+✅ **Consistent results** - predictable data  
+✅ **Easy to reset** - just refresh the page  
+✅ **Test edge cases** - includes bounces, spam, errors  
+
+#### Advanced: Environment Variable Toggle
+
+For easier switching between real and mock data, modify `email_status_page.py` around line 406:
+
+```python
+try:
+    # Check if we should use mock data for testing
+    use_mock = os.getenv("USE_MOCK_DATA", "false").lower() == "true"
+    
+    if use_mock:
+        from brevo_status_client_mock import MockBrevoStatusClient
+        client = MockBrevoStatusClient(BREVO_API_KEY)
+        st.info("🧪 Using mock data for testing")
+    else:
+        client = BrevoStatusClient(BREVO_API_KEY)
+except Exception as e:
+```
+
+Then run with mock data:
+```bash
+# Windows PowerShell
+$env:USE_MOCK_DATA="true"
+streamlit run streamlit_app.py
+
+# Windows CMD
+set USE_MOCK_DATA=true
+streamlit run streamlit_app.py
+
+# Linux/Mac
+USE_MOCK_DATA=true streamlit run streamlit_app.py
+```
 
 ## Monitoring
 
