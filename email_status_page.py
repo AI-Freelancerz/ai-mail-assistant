@@ -308,7 +308,8 @@ def main():
         time_options = {
             "24h": _t("Last 24 hours"),
             "48h": _t("Last 48 hours"),
-            "7days": _t("Last 7 days")
+            "7days": _t("Last 7 days"),
+            "all": _t("All")
         }
         selected_time = st.radio(
             _t("Time Range"),
@@ -416,8 +417,10 @@ def main():
         start_date = datetime.now() - timedelta(hours=24)
     elif st.session_state.time_filter == "48h":
         start_date = datetime.now() - timedelta(hours=48)
-    else:  # 7days
+    elif st.session_state.time_filter == "7days":
         start_date = datetime.now() - timedelta(days=7)
+    else:  # all
+        start_date = datetime.now() - timedelta(days=365)  # Go back 1 year for "all"
     
     end_date = datetime.now()
     limit = 100

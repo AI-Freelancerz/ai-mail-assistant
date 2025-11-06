@@ -117,6 +117,42 @@ div.stActionButton, div.stDownloadButton, div.stFileUploadDropzone {
     border-color: #1a4fbd;
 }
 
+/* Sidebar navigation button styling */
+div[data-testid="stSidebar"] .stButton>button {
+    width: 100%;
+    height: auto;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: all 0.2s ease-in-out;
+    border: 1px solid #e5e7eb;
+    background-color: white;
+    color: #374151;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    margin-bottom: 0.5rem;
+}
+
+div[data-testid="stSidebar"] .stButton>button:hover {
+    border-color: #3b82f6;
+    background-color: #f0f9ff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Selected sidebar navigation button */
+div[data-testid="stSidebar"] .stButton button[kind="primary"] {
+    background-color: #2563eb !important;
+    color: white !important;
+    border-color: #2563eb !important;
+    font-weight: 600 !important;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3) !important;
+}
+
+div[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
+    background-color: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+}
+
 /* Minimal metric-like card styling */
 .colored-metric {
     background: white;
@@ -1217,10 +1253,20 @@ logging.info(f"Rendering page: {st.session_state.page}")
 # Sidebar navigation
 with st.sidebar:
     st.markdown("## Navigation")
-    if st.button(_t("Generate & Send Emails"), use_container_width=True, key="nav_generate"):
+    if st.button(
+        _t("Generate & Send Emails"), 
+        use_container_width=True, 
+        key="nav_generate",
+        type="primary" if st.session_state.page == 'generate' or st.session_state.page == 'preview' or st.session_state.page == 'results' else "secondary"
+    ):
         st.session_state.page = 'generate'
         st.rerun()
-    if st.button(_t("Email Status Dashboard"), use_container_width=True, key="nav_email_status"):
+    if st.button(
+        _t("Email Status Dashboard"), 
+        use_container_width=True, 
+        key="nav_email_status",
+        type="primary" if st.session_state.page == 'email_status' else "secondary"
+    ):
         st.session_state.page = 'email_status'
         st.rerun()
 

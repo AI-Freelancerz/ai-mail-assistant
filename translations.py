@@ -206,6 +206,8 @@ TRANSLATIONS = {
         "Last 24 hours": "Last 24 hours",
         "Last 48 hours": "Last 48 hours",
         "Last 7 days": "Last 7 days",
+        "All": "All",
+        "Generate & Send Emails": "Generate & Send Emails",
         "🔄": "🔄",
         "🔄 Refresh": "🔄 Refresh",
         # Email tracking explanation
@@ -442,6 +444,8 @@ TRANSLATIONS = {
         "Last 24 hours": "Dernières 24 heures",
         "Last 48 hours": "Dernières 48 heures",
         "Last 7 days": "7 derniers jours",
+        "All": "Tous",
+        "Generate & Send Emails": "Générer et envoyer des e-mails",
         "🔄": "🔄",
         "🔄 Refresh": "🔄 Actualiser",
         # Email tracking explanation
