@@ -27,6 +27,38 @@ def extract_message_batch(message_id: str) -> str:
         return match.group(1)
     return message_id  # Fallback to full message_id if pattern doesn't match
 
+def is_soft_bounce_actually_invalid(bounce_reason: str) -> bool:
+    """
+    Check if a soft bounce reason indicates an actually invalid email.
+    Some soft bounces are permanent failures that should be treated as invalid:
+    - Connection timeout (domain doesn't exist or unreachable)
+    - Domain not found
+    - No mail server found for domain
+    - Invalid recipient
+    """
+    if not bounce_reason:
+        return False
+    
+    reason_lower = bounce_reason.lower()
+    
+    # Patterns that indicate truly invalid emails
+    invalid_patterns = [
+        "connection timeout",
+        "domain not found",
+        "no mail server",
+        "invalid recipient",
+        "recipient unknown",
+        "user unknown",
+        "mailbox not found",
+        "address rejected",
+        "does not exist",
+        "no such user",
+        "unrouteable address",
+        "bad destination mailbox",
+    ]
+    
+    return any(pattern in reason_lower for pattern in invalid_patterns)
+
 def main():
     # IMPORTANT: Do NOT call st.set_page_config here (already set in parent streamlit_app.py)
 
@@ -637,6 +669,7 @@ def main():
                         "last_event": "",
                         "last_event_date": "",
                         "send_date": "",  # Track earliest send date for sorting
+                        "bounce_reason": "",  # Track bounce reason for debugging
                         "click_links": [],
                     }
 
@@ -690,6 +723,11 @@ def main():
                 # Track clicked links
                 if event_type == "clicks" and event.get("link"):
                     email_data[msg_id]["click_links"].append(event["link"])
+                
+                # Track bounce reason for hard and soft bounces
+                if event_type in ('hardBounces', 'softBounces', 'blocked') and event.get("reason"):
+                    if not email_data[msg_id]["bounce_reason"]:  # Keep first reason
+                        email_data[msg_id]["bounce_reason"] = event["reason"]
 
             # Always group by message batch
             grouped_data = {}
@@ -742,25 +780,35 @@ def main():
             total_delivered = sum(1 for e in email_data.values() if e["delivered"] > 0)
             total_opened = sum(1 for e in email_data.values() if e["opened"] > 0)
             total_clicked = sum(1 for e in email_data.values() if e["clicks"] > 0)
-            total_bounced = sum(1 for e in email_data.values() if e["hardBounces"] > 0 or e["softBounces"] > 0)
+            # Invalid = hard bounces OR soft bounces with invalid reasons (like connection timeout)
+            total_invalid = sum(1 for e in email_data.values() 
+                              if (e["hardBounces"] > 0 or 
+                                  (e["softBounces"] > 0 and is_soft_bounce_actually_invalid(e["bounce_reason"]))))
+            # Failed = blocked, errors, or soft bounces (excluding those that are actually invalid)
+            total_failed = sum(1 for e in email_data.values() 
+                             if ((e["blocked"] > 0 or e["error"] > 0 or 
+                                  (e["softBounces"] > 0 and not is_soft_bounce_actually_invalid(e["bounce_reason"]))) 
+                                 and e["hardBounces"] == 0))
 
-            col1, col2, col3, col4, col5 = st.columns(5)
-            with col1:
+            # Create two rows: first row with 3 cols, second row with 3 cols
+            row1_col1, row1_col2, row1_col3 = st.columns(3, gap="medium")
+            with row1_col1:
                 st.markdown(
                     f"""
-                    <div style="text-align: center;">
+                    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; text-align: center; margin-bottom: 1rem; min-height: 180px; display: flex; flex-direction: column; justify-content: center;">
                         <div style="font-size: 1.5rem;">📧</div>
                         <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Total Recipients")}</div>
                         <div style="font-size: 1.75rem; font-weight: 700;">{total_emails}</div>
+                        <div style="font-size: 0.75rem; color: transparent; margin-top: 0.25rem; user-select: none;">-</div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
-            with col2:
+            with row1_col2:
                 delivery_rate = f"{(total_delivered/total_emails*100):.1f}%" if total_emails > 0 else "N/A"
                 st.markdown(
                     f"""
-                    <div style="text-align: center;">
+                    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; text-align: center; margin-bottom: 1rem; min-height: 180px; display: flex; flex-direction: column; justify-content: center;">
                         <div style="font-size: 1.5rem;">✅</div>
                         <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Delivered")}</div>
                         <div style="font-size: 1.75rem; font-weight: 700;">{total_delivered}</div>
@@ -769,11 +817,11 @@ def main():
                     """,
                     unsafe_allow_html=True
                 )
-            with col3:
+            with row1_col3:
                 open_rate = f"{(total_opened/total_delivered*100):.1f}%" if total_delivered > 0 else "N/A"
                 st.markdown(
                     f"""
-                    <div style="text-align: center;">
+                    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; text-align: center; margin-bottom: 1rem; min-height: 180px; display: flex; flex-direction: column; justify-content: center;">
                         <div style="font-size: 1.5rem;">📖</div>
                         <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Opened")}</div>
                         <div style="font-size: 1.75rem; font-weight: 700;">{total_opened}</div>
@@ -782,11 +830,13 @@ def main():
                     """,
                     unsafe_allow_html=True
                 )
-            with col4:
+            
+            row2_col1, row2_col2, row2_col3 = st.columns(3, gap="medium")
+            with row2_col1:
                 click_rate = f"{(total_clicked/total_delivered*100):.1f}%" if total_delivered > 0 else "N/A"
                 st.markdown(
                     f"""
-                    <div style="text-align: center;">
+                    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; text-align: center; min-height: 180px; display: flex; flex-direction: column; justify-content: center;">
                         <div style="font-size: 1.5rem;">🔗</div>
                         <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Clicked")}</div>
                         <div style="font-size: 1.75rem; font-weight: 700;">{total_clicked}</div>
@@ -795,15 +845,28 @@ def main():
                     """,
                     unsafe_allow_html=True
                 )
-            with col5:
-                bounce_rate = f"{(total_bounced/total_emails*100):.1f}%" if total_emails > 0 else "N/A"
+            with row2_col2:
+                invalid_rate = f"{(total_invalid/total_emails*100):.1f}%" if total_emails > 0 else "N/A"
                 st.markdown(
                     f"""
-                    <div style="text-align: center;">
+                    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; text-align: center; min-height: 180px; display: flex; flex-direction: column; justify-content: center;">
+                        <div style="font-size: 1.5rem;">🚫</div>
+                        <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Invalid Email")}</div>
+                        <div style="font-size: 1.75rem; font-weight: 700;">{total_invalid}</div>
+                        <div style="font-size: 0.75rem; color: #ef4444; margin-top: 0.25rem;">{invalid_rate}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            with row2_col3:
+                failed_rate = f"{(total_failed/total_emails*100):.1f}%" if total_emails > 0 else "N/A"
+                st.markdown(
+                    f"""
+                    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; text-align: center; min-height: 180px; display: flex; flex-direction: column; justify-content: center;">
                         <div style="font-size: 1.5rem;">❌</div>
-                        <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Bounced")}</div>
-                        <div style="font-size: 1.75rem; font-weight: 700;">{total_bounced}</div>
-                        <div style="font-size: 0.75rem; color: #ef4444; margin-top: 0.25rem;">{bounce_rate}</div>
+                        <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">{_t("Failed")}</div>
+                        <div style="font-size: 1.75rem; font-weight: 700;">{total_failed}</div>
+                        <div style="font-size: 0.75rem; color: #f59e0b; margin-top: 0.25rem;">{failed_rate}</div>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -911,23 +974,31 @@ def main():
                         
                         # === KPI Tiles ===
                         # Calculate metrics
-                        bounced = group["total_hardBounces"] + group["total_softBounces"]
-                        pending = group["total_sent"] - group["total_delivered"] - bounced
+                        # Invalid = hard bounces OR soft bounces with invalid reasons (like connection timeout)
+                        soft_bounces_invalid = sum(1 for r in group["recipients"] 
+                                                  if r["softBounces"] > 0 and is_soft_bounce_actually_invalid(r["bounce_reason"]))
+                        invalid = group["total_hardBounces"] + soft_bounces_invalid
+                        # Failed = blocked + soft bounces (excluding those that are actually invalid)
+                        soft_bounces_failed = group["total_softBounces"] - soft_bounces_invalid
+                        failed_other = group["total_blocked"] + soft_bounces_failed
+                        total_failures = invalid + failed_other
+                        pending = group["total_sent"] - group["total_delivered"] - total_failures
                         
                         sent_pct = 100
                         delivered_pct = (group['total_delivered']/group['total_sent']*100) if group['total_sent'] > 0 else 0
-                        failed_pct = (bounced/group['total_sent']*100) if group['total_sent'] > 0 else 0
+                        invalid_pct = (invalid/group['total_sent']*100) if group['total_sent'] > 0 else 0
+                        failed_other_pct = (failed_other/group['total_sent']*100) if group['total_sent'] > 0 else 0
                         opened_pct = (group['total_opened']/group['total_delivered']*100) if group['total_delivered'] > 0 else 0
                         pending_pct = (pending/group['total_sent']*100) if group['total_sent'] > 0 else 0
                         
-                        # Create 5 columns for KPI tiles (all aligned)
-                        kpi_cols = st.columns(5)
+                        # Create first row with 3 KPI tiles
+                        kpi_row1 = st.columns(3, gap="medium")
                         
                         # Sent KPI
-                        with kpi_cols[0]:
+                        with kpi_row1[0]:
                             st.markdown(
                                 f"""
-                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
                                         <span style="font-size: 1.25rem;">📧</span>
                                         <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Sent")}</span>
@@ -943,10 +1014,10 @@ def main():
                             )
                         
                         # Delivered KPI
-                        with kpi_cols[1]:
+                        with kpi_row1[1]:
                             st.markdown(
                                 f"""
-                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
                                         <span style="font-size: 1.25rem;">✅</span>
                                         <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Delivered")}</span>
@@ -961,30 +1032,11 @@ def main():
                                 unsafe_allow_html=True
                             )
                         
-                        # Failed KPI
-                        with kpi_cols[2]:
-                            st.markdown(
-                                f"""
-                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
-                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-                                        <span style="font-size: 1.25rem;">❌</span>
-                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Failed")}</span>
-                                    </div>
-                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{bounced}</div>
-                                    <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
-                                        <div style="height: 100%; width: {failed_pct}%; background: linear-gradient(90deg, #ef4444, #dc2626); border-radius: 2px;"></div>
-                                    </div>
-                                    <div style="font-size: 0.75rem; color: #6b7280;">{failed_pct:.0f}%</div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True
-                            )
-                        
                         # Read KPI
-                        with kpi_cols[3]:
+                        with kpi_row1[2]:
                             st.markdown(
                                 f"""
-                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
                                         <span style="font-size: 1.25rem;">📖</span>
                                         <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Read")}</span>
@@ -999,8 +1051,49 @@ def main():
                                 unsafe_allow_html=True
                             )
                         
+                        # Create second row with 3 KPI tiles
+                        kpi_row2 = st.columns(3, gap="medium")
+                        
+                        # Invalid Email KPI
+                        with kpi_row2[0]:
+                            st.markdown(
+                                f"""
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <span style="font-size: 1.25rem;">🚫</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Invalid Email")}</span>
+                                    </div>
+                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{invalid}</div>
+                                    <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
+                                        <div style="height: 100%; width: {invalid_pct}%; background: linear-gradient(90deg, #ef4444, #dc2626); border-radius: 2px;"></div>
+                                    </div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{invalid_pct:.0f}% (hard bounces)</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                        
+                        # Failed KPI
+                        with kpi_row2[1]:
+                            st.markdown(
+                                f"""
+                                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <span style="font-size: 1.25rem;">❌</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Failed")}</span>
+                                    </div>
+                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{failed_other}</div>
+                                    <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
+                                        <div style="height: 100%; width: {failed_other_pct}%; background: linear-gradient(90deg, #f59e0b, #d97706); border-radius: 2px;"></div>
+                                    </div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{failed_other_pct:.0f}% (blocked/soft)</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                        
                         # Pending KPI
-                        with kpi_cols[4]:
+                        with kpi_row2[2]:
                             st.markdown(
                                 f"""
                                 <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
@@ -1027,10 +1120,30 @@ def main():
                         # Add explanation about tracking
                         with st.expander(_t("ℹ️ Understanding email tracking")):
                             st.markdown(f"""
-                            **{_t("How email tracking works:")}**
-                            - **{_t("Delivered: Email successfully reached the recipient's inbox")}**
-                            - **{_t("Read (Opened): Recipient opened the email and loaded images (tracking pixel)")}**
-                            - **{_t("Clicked: Recipient clicked a link in the email")}**
+                            **{_t("Email Delivery Statuses:")}**
+                            - **🚫 {_t("Invalid Email")}: {_t("Permanent failure - email address doesn't exist, domain is invalid, or unreachable")}**
+                            - **❌ {_t("Failed")}: {_t("Temporary issues (mailbox full, server busy), blocked by server, or other errors")}**
+                            - **⚠️ {_t("Delayed")}: {_t("Deferred - email is still being retried by the server")}**
+                            - **✅ {_t("Delivered")}: {_t("Email successfully reached the recipient's inbox")}**
+                            - **📖 {_t("Opened")}: {_t("Recipient opened the email and loaded images (tracking pixel)")}**
+                            - **🔗 {_t("Clicked")}: {_t("Recipient clicked a link in the email")}**
+                            - **🎯 {_t("Engaged")}: {_t("Recipient both opened and clicked links")}**
+                            - **⏳ {_t("Pending")}: {_t("No delivery status received yet from Brevo")}**
+                            
+                            **{_t("Understanding Bounces:")}**
+                            - **{_t("Hard Bounce → Invalid")}: {_t("The email address is permanently invalid. Brevo marks these automatically.")}**
+                            - **{_t("Soft Bounce → Invalid (Smart Detection)")}: {_t("Reasons like 'connection timeout', 'domain not found', 'no mail server' indicate the email is actually invalid.")}**
+                            - **{_t("Soft Bounce → Failed")}: {_t("Temporary issues - mailbox full, server temporarily down, message too large, etc. May succeed if retried later.")}**
+                            - **{_t("Blocked → Failed")}: {_t("Recipient's server blocked the email due to spam filters or policy rules.")}**
+                            
+                            **{_t("Smart Invalid Detection:")}**
+                            {_t("The system automatically identifies invalid emails by checking:")}
+                            - {_t("Hard bounces from Brevo (always invalid)")}
+                            - {_t("Soft bounces with reasons indicating permanent failures:")}
+                              - {_t("Connection timeout (domain unreachable)")}
+                              - {_t("Domain not found")}
+                              - {_t("No mail server for domain")}
+                              - {_t("Invalid/unknown recipient")}
                             
                             **{_t('Why you might see "Clicked" without "Read":')}**
                             - {_t("Recipient has images disabled/blocked in their email client")}
@@ -1038,7 +1151,14 @@ def main():
                             - {_t("Some email clients block tracking pixels but allow link clicks")}
                             
                             **{_t("This is normal and indicates engagement even without open tracking!")}**
+                            
+                            **💡 Tip:** {_t("Enable debug mode below the table to see detailed bounce reasons from Brevo.")}
                             """)
+
+
+
+
+
                         
                         # Build activity table data
                         # First, check if we should show debug info (will be set by checkbox below table)
@@ -1047,12 +1167,19 @@ def main():
                         activity_rows = []
                         for r in group["recipients"]:
                             # Determine delivery status with improved logic
-                            # Priority: Failed > Delivered (with engagement) > Delayed > Pending
+                            # Priority: Invalid > Failed > Delivered (with engagement) > Delayed > Pending
                             
-                            # Check for failures first
-                            if r["hardBounces"] > 0 or r["blocked"] > 0:
-                                delivery_status = _t("❌ Failed")
+                            # Check for invalid email addresses (hard bounces OR soft bounces with invalid reasons)
+                            # Hard bounces are permanent failures from Brevo - truly invalid/non-existent addresses
+                            # Some soft bounces (like connection timeout) also indicate invalid emails
+                            if r["hardBounces"] > 0 or (r["softBounces"] > 0 and is_soft_bounce_actually_invalid(r["bounce_reason"])):
+                                delivery_status = _t("🚫 Invalid Email")
                                 status_priority = 1
+                            # Check for other failures (blocked, errors, soft bounces with temporary issues)
+                            # Soft bounces = temporary issues (mailbox full, etc.)
+                            elif r["blocked"] > 0 or r["error"] > 0 or r["softBounces"] > 0:
+                                delivery_status = _t("❌ Failed")
+                                status_priority = 2
                             # Check for successful delivery
                             elif r["delivered"] > 0:
                                 # Determine engagement level
@@ -1061,24 +1188,24 @@ def main():
                                 
                                 if has_clicked and has_opened:
                                     delivery_status = _t("🎯 Engaged (Opened & Clicked)")
-                                    status_priority = 2
+                                    status_priority = 3
                                 elif has_clicked:
                                     delivery_status = _t("🔗 Clicked (without open tracking)")
-                                    status_priority = 3
+                                    status_priority = 4
                                 elif has_opened:
                                     delivery_status = _t("📖 Opened")
-                                    status_priority = 4
+                                    status_priority = 5
                                 else:
                                     delivery_status = _t("✅ Delivered")
-                                    status_priority = 5
-                            # Check for soft failures
-                            elif r["softBounces"] > 0 or r["deferred"] > 0:
+                                    status_priority = 6
+                            # Check for deferred (temporary delay, might still be sending)
+                            elif r["deferred"] > 0:
                                 delivery_status = _t("⚠️ Delayed")
-                                status_priority = 6
-                            # Default to pending
+                                status_priority = 7
+                            # Default to pending (no events received yet)
                             else:
                                 delivery_status = _t("⏳ Pending")
-                                status_priority = 7
+                                status_priority = 8
                             
                             # Format timestamp
                             timestamp_str = r["last_event_date"]
@@ -1116,6 +1243,7 @@ def main():
                                 row_data[_t("Soft Bounces")] = r["softBounces"]
                                 row_data[_t("Blocked")] = r["blocked"]
                                 row_data[_t("Deferred")] = r["deferred"]
+                                row_data[_t("Bounce Reason")] = r.get("bounce_reason", "")  # Show Brevo's bounce reason
                                 row_data[_t("Status Priority")] = status_priority
                             
                             activity_rows.append(row_data)
