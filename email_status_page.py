@@ -1224,12 +1224,45 @@ def main():
                             # Note: Clicked can happen without Read (images blocked)
                             is_delivered = r["delivered"] > 0
                             
+                            # Format clicked links for display
+                            clicked_links_display = ""
+                            if r["click_links"]:
+                                # Show unique links that were clicked
+                                unique_links = list(set(r["click_links"]))
+                                if len(unique_links) == 1:
+                                    link = unique_links[0]
+                                    # Extract meaningful part of URL for display
+                                    if "unsubscribe" in link.lower():
+                                        clicked_links_display = "🔕 Unsubscribe"
+                                    elif "donate" in link.lower() or "don" in link.lower():
+                                        clicked_links_display = "💝 Donate"
+                                    else:
+                                        # Show shortened URL (remove protocol and www)
+                                        display_link = link.replace("https://", "").replace("http://", "").replace("www.", "")
+                                        # Truncate if too long
+                                        if len(display_link) > 40:
+                                            display_link = display_link[:37] + "..."
+                                        clicked_links_display = display_link
+                                else:
+                                    # Multiple links clicked - show count and types
+                                    link_types = []
+                                    for link in unique_links:
+                                        if "unsubscribe" in link.lower():
+                                            link_types.append("🔕")
+                                        elif "donate" in link.lower() or "don" in link.lower():
+                                            link_types.append("💝")
+                                    if link_types:
+                                        clicked_links_display = " ".join(link_types) + f" ({len(unique_links)} links)"
+                                    else:
+                                        clicked_links_display = f"{len(unique_links)} links"
+                            
                             row_data = {
                                 _t("Recipient"): r["email"],
                                 _t("Delivery Status"): delivery_status,
                                 _t("Delivered"): "✓" if is_delivered else "—",
                                 _t("Read"): "✓" if (r["opened"] > 0 and is_delivered) else "—",
                                 _t("Clicked"): "✓" if (r["clicks"] > 0 and is_delivered) else "—",
+                                _t("Clicked Links"): clicked_links_display if clicked_links_display else "—",
                                 _t("Timestamp"): timestamp_str
                             }
                             
