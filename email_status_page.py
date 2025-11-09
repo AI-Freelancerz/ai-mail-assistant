@@ -325,6 +325,32 @@ def main():
         .stDataFrame > div {
             border: none !important;
         }
+        
+        /* Dataframe cell styling */
+        .stDataFrame [data-testid="stDataFrameResizable"] tbody td {
+            vertical-align: middle !important;
+            padding: 8px !important;
+        }
+        
+        /* Make Clicked Links column compact but readable */
+        .stDataFrame [data-testid="stDataFrameResizable"] tbody tr td:nth-child(6),
+        .stDataFrame [data-testid="stDataFrameResizable"] thead tr th:nth-child(6) {
+            max-width: 150px !important;
+            min-width: 80px !important;
+            text-align: center !important;
+        }
+        
+        /* Make checkmark columns compact */
+        .stDataFrame [data-testid="stDataFrameResizable"] tbody tr td:nth-child(3),
+        .stDataFrame [data-testid="stDataFrameResizable"] tbody tr td:nth-child(4),
+        .stDataFrame [data-testid="stDataFrameResizable"] tbody tr td:nth-child(5),
+        .stDataFrame [data-testid="stDataFrameResizable"] thead tr th:nth-child(3),
+        .stDataFrame [data-testid="stDataFrameResizable"] thead tr th:nth-child(4),
+        .stDataFrame [data-testid="stDataFrameResizable"] thead tr th:nth-child(5) {
+            max-width: 80px !important;
+            min-width: 60px !important;
+            text-align: center !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -982,14 +1008,13 @@ def main():
                         soft_bounces_failed = group["total_softBounces"] - soft_bounces_invalid
                         failed_other = group["total_blocked"] + soft_bounces_failed
                         total_failures = invalid + failed_other
-                        pending = group["total_sent"] - group["total_delivered"] - total_failures
                         
                         sent_pct = 100
                         delivered_pct = (group['total_delivered']/group['total_sent']*100) if group['total_sent'] > 0 else 0
                         invalid_pct = (invalid/group['total_sent']*100) if group['total_sent'] > 0 else 0
                         failed_other_pct = (failed_other/group['total_sent']*100) if group['total_sent'] > 0 else 0
                         opened_pct = (group['total_opened']/group['total_delivered']*100) if group['total_delivered'] > 0 else 0
-                        pending_pct = (pending/group['total_sent']*100) if group['total_sent'] > 0 else 0
+                        clicked_pct = (group['total_clicks']/group['total_delivered']*100) if group['total_delivered'] > 0 else 0
                         
                         # Create first row with 3 KPI tiles
                         kpi_row1 = st.columns(3, gap="medium")
@@ -1092,20 +1117,20 @@ def main():
                                 unsafe_allow_html=True
                             )
                         
-                        # Pending KPI
+                        # Clicked KPI
                         with kpi_row2[2]:
                             st.markdown(
                                 f"""
                                 <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-                                        <span style="font-size: 1.25rem;">⏳</span>
-                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Pending")}</span>
+                                        <span style="font-size: 1.25rem;">🔗</span>
+                                        <span style="font-size: 0.8rem; font-weight: 500; color: #6b7280; text-transform: uppercase;">{_t("Clicked")}</span>
                                     </div>
-                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{pending}</div>
+                                    <div style="font-size: 2rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">{group["total_clicks"]}</div>
                                     <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.25rem;">
-                                        <div style="height: 100%; width: {pending_pct}%; background: linear-gradient(90deg, #f59e0b, #d97706); border-radius: 2px;"></div>
+                                        <div style="height: 100%; width: {clicked_pct}%; background: linear-gradient(90deg, #3b82f6, #2563eb); border-radius: 2px;"></div>
                                     </div>
-                                    <div style="font-size: 0.75rem; color: #6b7280;">{pending_pct:.0f}%</div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{clicked_pct:.0f}% {_t("of delivered")}</div>
                                 </div>
                                 """,
                                 unsafe_allow_html=True
@@ -1129,6 +1154,11 @@ def main():
                             - **🔗 {_t("Clicked")}: {_t("Recipient clicked a link in the email")}**
                             - **🎯 {_t("Engaged")}: {_t("Recipient both opened and clicked links")}**
                             - **⏳ {_t("Pending")}: {_t("No delivery status received yet from Brevo")}**
+                            
+                            **{_t("Clicked Links Icons:")}**
+                            - **🔕** = {_t("Unsubscribe link clicked")}
+                            - **💝** = {_t("Donation/payment link clicked")}
+                            - {_t("Multiple icons show when recipient clicked multiple links (e.g., 🔕 💝 means both unsubscribe and donate were clicked)")}
                             
                             **{_t("Understanding Bounces:")}**
                             - **{_t("Hard Bounce → Invalid")}: {_t("The email address is permanently invalid. Brevo marks these automatically.")}**
@@ -1227,34 +1257,61 @@ def main():
                             # Format clicked links for display
                             clicked_links_display = ""
                             if r["click_links"]:
+                                # Helper function to identify link type
+                                def identify_link_type(link):
+                                    """Identify the type of link and return a display name"""
+                                    link_lower = link.lower()
+                                    
+                                    # Check for unsubscribe patterns
+                                    if ("unsubscribe" in link_lower or 
+                                        "désabonnement" in link_lower or
+                                        "desinscription" in link_lower or
+                                        # Google Forms often used for unsubscribe
+                                        ("docs.google.com/forms" in link_lower) or
+                                        ("forms.gle" in link_lower)):
+                                        return ("🔕 Unsubscribe", "unsubscribe")
+                                    
+                                    # Check for donate patterns
+                                    elif ("donate" in link_lower or 
+                                          "donation" in link_lower or
+                                          "don" in link_lower or
+                                          "dons" in link_lower or
+                                          "paiement" in link_lower or
+                                          "stripe" in link_lower):
+                                        return ("💝 Donate", "donate")
+                                    
+                                    # Other links - show shortened URL
+                                    else:
+                                        display_link = link.replace("https://", "").replace("http://", "").replace("www.", "")
+                                        if len(display_link) > 30:
+                                            display_link = display_link[:27] + "..."
+                                        return (display_link, "other")
+                                
                                 # Show unique links that were clicked
                                 unique_links = list(set(r["click_links"]))
                                 if len(unique_links) == 1:
                                     link = unique_links[0]
-                                    # Extract meaningful part of URL for display
-                                    if "unsubscribe" in link.lower():
-                                        clicked_links_display = "🔕 Unsubscribe"
-                                    elif "donate" in link.lower() or "don" in link.lower():
-                                        clicked_links_display = "💝 Donate"
-                                    else:
-                                        # Show shortened URL (remove protocol and www)
-                                        display_link = link.replace("https://", "").replace("http://", "").replace("www.", "")
-                                        # Truncate if too long
-                                        if len(display_link) > 40:
-                                            display_link = display_link[:37] + "..."
-                                        clicked_links_display = display_link
+                                    display_name, link_type = identify_link_type(link)
+                                    clicked_links_display = display_name
                                 else:
-                                    # Multiple links clicked - show count and types
-                                    link_types = []
+                                    # Multiple links clicked - show each link type clearly
+                                    link_displays = []
                                     for link in unique_links:
-                                        if "unsubscribe" in link.lower():
-                                            link_types.append("🔕")
-                                        elif "donate" in link.lower() or "don" in link.lower():
-                                            link_types.append("💝")
-                                    if link_types:
-                                        clicked_links_display = " ".join(link_types) + f" ({len(unique_links)} links)"
-                                    else:
-                                        clicked_links_display = f"{len(unique_links)} links"
+                                        display_name, link_type = identify_link_type(link)
+                                        # For multiple links, use very compact format
+                                        if link_type == "unsubscribe":
+                                            link_displays.append("🔕")
+                                        elif link_type == "donate":
+                                            link_displays.append("💝")
+                                        else:
+                                            # For other links, just show first part of domain
+                                            short_name = display_name.split("/")[0].split(".")[0]
+                                            if len(short_name) > 10:
+                                                short_name = short_name[:8] + ".."
+                                            link_displays.append(short_name)
+                                    
+                                    # Join with spaces for compact display
+                                    clicked_links_display = " ".join(link_displays)
                             
                             row_data = {
                                 _t("Recipient"): r["email"],

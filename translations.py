@@ -251,6 +251,10 @@ TRANSLATIONS = {
         "No mail server for domain": "No mail server for domain",
         "Invalid/unknown recipient": "Invalid/unknown recipient",
         "Enable debug mode below the table to see detailed bounce reasons from Brevo.": "Enable debug mode below the table to see detailed bounce reasons from Brevo.",
+        "Clicked Links Icons:": "Clicked Links Icons:",
+        "Unsubscribe link clicked": "Unsubscribe link clicked",
+        "Donation/payment link clicked": "Donation/payment link clicked",
+        "Multiple icons show when recipient clicked multiple links (e.g., 🔕 💝 means both unsubscribe and donate were clicked)": "Multiple icons show when recipient clicked multiple links (e.g., 🔕 💝 means both unsubscribe and donate were clicked)",
         "🚫 Invalid Email": "🚫 Invalid Email",
         "Invalid Email": "Invalid Email",
         "Bounce Reason": "Bounce Reason"
@@ -523,6 +527,10 @@ TRANSLATIONS = {
         "No mail server for domain": "Aucun serveur de messagerie pour le domaine",
         "Invalid/unknown recipient": "Destinataire invalide/inconnu",
         "Enable debug mode below the table to see detailed bounce reasons from Brevo.": "Activez le mode débogage sous le tableau pour voir les raisons de rebond détaillées de Brevo.",
+        "Clicked Links Icons:": "Icônes des liens cliqués :",
+        "Unsubscribe link clicked": "Lien de désabonnement cliqué",
+        "Donation/payment link clicked": "Lien de don/paiement cliqué",
+        "Multiple icons show when recipient clicked multiple links (e.g., 🔕 💝 means both unsubscribe and donate were clicked)": "Plusieurs icônes s'affichent lorsque le destinataire a cliqué sur plusieurs liens (par ex., 🔕 💝 signifie que le désabonnement et le don ont été cliqués)",
         "🚫 Invalid Email": "🚫 E-mail invalide",
         "Invalid Email": "E-mail invalide",
         "Bounce Reason": "Raison du rebond"
