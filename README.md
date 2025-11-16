@@ -121,23 +121,23 @@ ai-mail-assistant/
 ```mermaid
 flowchart LR
     subgraph UI
-        A[Streamlit App<br/>(streamlit_app.py & email_status_page.py)]
+        A["Streamlit App<br/>(streamlit_app.py and email_status_page.py)"]
     end
 
     subgraph Core
-        B[data_handler.py<br/>data_handler_phone_numbers.py]
-        C[email_agent.py]
-        D[email_tool.py]
-        E[brevo_status_client.py]
-        F[config.py & translations.py]
-        G[logs/<br/>sending_log.txt]
+        B["data_handler.py<br/>data_handler_phone_numbers.py"]
+        C["email_agent.py"]
+        D["email_tool.py"]
+        E["brevo_status_client.py"]
+        F["config.py and translations.py"]
+        G["logs/<br/>sending_log.txt"]
     end
 
     subgraph External
-        H[(Brevo API)]
-        I[(OpenAI API)]
-        J[(Excel/CSV Contacts)]
-        K[(.streamlit/secrets.toml)]
+        H[("Brevo API")]
+        I[("OpenAI API")]
+        J[("Excel/CSV Contacts")]
+        K[(".streamlit/secrets.toml")]
     end
 
     J --> B
