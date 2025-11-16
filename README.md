@@ -110,9 +110,66 @@ ai-mail-assistant/
 ├── translations.py               # Multi-language support
 ├── config.py                     # Configuration management
 ├── requirements.txt              # Python dependencies
-└── .streamlit/
-    └── secrets.toml              # Secret configuration (not in repo)
+    └── .streamlit/
+        └── secrets.toml              # Secret configuration (not in repo)
 ```
+
+## Architecture Overview
+
+### High-Level Diagram
+
+```mermaid
+flowchart LR
+    subgraph UI
+        A[Streamlit App<br/>(streamlit_app.py & email_status_page.py)]
+    end
+
+    subgraph Core
+        B[data_handler.py<br/>data_handler_phone_numbers.py]
+        C[email_agent.py]
+        D[email_tool.py]
+        E[brevo_status_client.py]
+        F[config.py & translations.py]
+        G[logs/<br/>sending_log.txt]
+    end
+
+    subgraph External
+        H[(Brevo API)]
+        I[(OpenAI API)]
+        J[(Excel/CSV Contacts)]
+        K[(.streamlit/secrets.toml)]
+    end
+
+    J --> B
+    A --> B
+    B --> A
+    A --> C
+    C --> I
+    I --> C
+    C --> D
+    A --> D
+    D --> E
+    E --> H
+    H --> E
+    E --> A
+    D --> G
+    F --> A
+    F --> C
+    F --> D
+    K --> F
+```
+
+### Component Roles and Interactions
+
+- **Streamlit UI (streamlit_app.py & email_status_page.py)**: Central interaction layer where campaign configuration, AI generation prompts, sending actions, and status monitoring occur. It orchestrates calls into the rest of the system and renders results back to the user.
+- **Data Handlers (data_handler.py & data_handler_phone_numbers.py)**: Validate and normalize uploaded Excel/CSV contact data for email and SMS campaigns, ensuring downstream modules work with consistent structures.
+- **AI Generation (email_agent.py)**: Produces personalized email copy by combining user prompts, translations, and configuration, then relaying structured requests to the OpenAI API.
+- **Email Operations (email_tool.py)**: Prepares batched payloads, handles attachments, applies retry logic, and records send outcomes while collaborating with the Brevo client.
+- **Brevo Client (brevo_status_client.py)**: Wraps Brevo’s transactional email and reporting APIs. It sends payloads from `email_tool.py` and retrieves delivery/open/click events for the dashboard.
+- **Configuration & Localization (config.py, translations.py, .streamlit/secrets.toml)**: Supply runtime settings, localization strings, and secrets such as API keys so that UI and backend modules stay environment-agnostic.
+- **Logging (logs/, sending_log.txt, failed_emails.log)**: Persist sending outcomes, retries, and errors. These artifacts feed the dashboard and help operators diagnose issues.
+- **External Services (Brevo API & OpenAI API)**: Provide email delivery infrastructure and AI text generation, respectively. The application keeps these interactions stateless and retry-aware to ensure reliability.
+- **User Data Inputs (Excel/CSV Contacts)**: Serve as the source of recipient metadata for personalization; processed by the data handlers before feeding the AI generation and email sending flows.
 
 ## API Integration
 
