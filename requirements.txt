@@ -5,7 +5,8 @@ python-dotenv
 langchain
 langchain-openai
 openpyxl
-streamlit
+streamlit>=1.29.0
+altair<5
 brevo-python
 android-sms-gateway
 streamlit-authenticator

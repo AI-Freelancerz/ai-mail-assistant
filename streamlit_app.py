@@ -758,6 +758,15 @@ def page_generate():
         _t("Upload Excel (.xlsx/.xls)"),
         type=["xlsx","xls"]
     )
+    
+    # NEW: Detect if file was removed or changed
+    if uploaded_file is None and st.session_state.uploaded_file_name:
+        # File was removed, reset state
+        st.session_state.uploaded_file_name = None
+        st.session_state.contacts = []
+        st.session_state.contact_issues = []
+        st.session_state.show_generation_section = False
+        st.rerun()
 
     # Process file only if a new file is uploaded (by name or initial upload)
     if uploaded_file is not None and \
@@ -796,6 +805,10 @@ def page_generate():
         
         if contacts:
             st.success(_t("Successfully loaded {count} valid contacts.", count=len(contacts)))
+            # --- SHOW UPLOADED CONTACTS ---
+            with st.expander(_t("View uploaded contacts list")):
+                st.dataframe(pd.DataFrame(contacts), use_container_width=True)
+            # ------------------------------
         else:
             st.error(_t("No valid contacts found in the Excel file."))
             logging.warning("No valid contacts found in uploaded file")
