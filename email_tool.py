@@ -20,7 +20,20 @@ from config import (
     EMAIL_RATE_LIMIT_DELAY,
     EMAIL_CHUNK_DELAY,
     EMAIL_DEFAULT_CHUNK_SIZE,
-    EMAIL_MAX_ATTACHMENT_SIZE_MB
+    EMAIL_MAX_ATTACHMENT_SIZE_MB,
+    SENDER_EMAIL,
+    SENDER_DOMAIN,
+    REQUIRE_DOMAIN_VERIFICATION
+)
+
+# Import email deliverability utilities
+from email_utils import (
+    html_to_plain_text,
+    validate_email_content,
+    is_safe_send_time,
+    build_email_headers,
+    format_unsubscribe_footer,
+    is_gmail_address
 )
 
 # === CONFIGURATION CONSTANTS ===
@@ -212,6 +225,18 @@ def send_email_message(sender_email, sender_name, to_email, to_name, subject, bo
 @retry_with_exponential_backoff(max_retries=MAX_RETRIES)
 def _send_email_message_with_retry(sender_email, sender_name, to_email, to_name, subject, body, attachments=None):
     """Internal function with retry decorator applied."""
+    
+    # CRITICAL: Validate sender domain
+    if REQUIRE_DOMAIN_VERIFICATION and is_gmail_address(sender_email):
+        error_msg = (
+            f"❌ BLOCKED: Cannot send from Gmail address ({sender_email}). "
+            f"Gmail prohibits bulk sending and causes DMARC failures. "
+            f"Please configure a verified organizational domain in config.py (SENDER_EMAIL)"
+        )
+        logging.error(f"[EMAIL_TOOL] {error_msg}")
+        _log_failed_email_to_file(sender_email, to_email, subject, body, error_msg)
+        raise ValueError(error_msg)
+    
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key['api-key'] = BREVO_API_KEY
     api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
@@ -232,12 +257,26 @@ def _send_email_message_with_retry(sender_email, sender_name, to_email, to_name,
                 logging.error(f"[EMAIL_TOOL] Failed to process attachment {path}: {e}")
                 _log_failed_email_to_file(sender_email, to_email, subject, body, f"Attachment error: {str(e)}")
 
+    # Generate HTML body
     html_body = body.replace('\n', '<br>')
+    
+    # Add unsubscribe footer
+    html_body_with_footer = html_body + format_unsubscribe_footer(to_email)
+    
+    # Generate plain-text version (CRITICAL for deliverability)
+    plain_text_body = html_to_plain_text(html_body_with_footer)
+    
+    # Build RFC-compliant headers
+    headers = build_email_headers(campaign_id=f"single_{datetime.datetime.now().strftime('%Y%m%d')}")
+    
+    # Build email with both HTML and plain-text versions
     email_args = {
         'sender': {'email': sender_email, 'name': sender_name},
         'to': [ {'email': to_email, 'name': to_name} ],
         'subject': subject,
-        'html_content': html_body,
+        'html_content': html_body_with_footer,
+        'text_content': plain_text_body,  # ✅ Plain-text version added
+        'headers': headers,  # ✅ RFC-compliant headers added
     }
     if attachment_list:
         email_args['attachment'] = attachment_list

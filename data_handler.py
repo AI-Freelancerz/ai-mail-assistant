@@ -2,11 +2,19 @@
 import pandas as pd
 import re # Import regex for more robust email pattern checking
 import logging
+from suppression_list_manager import get_suppression_manager
 
-def load_contacts_from_excel(file_path):
+def load_contacts_from_excel(file_path, filter_suppressed=True):
     """
     Loads contacts from an Excel file, dynamically identifies 'email' and 'name' columns,
-    and returns a list of dictionaries with 'name' and 'email' keys.
+    filters out suppressed addresses, and returns a list of dictionaries with 'name' and 'email' keys.
+    
+    Args:
+        file_path: Path to Excel file
+        filter_suppressed: If True, remove suppressed addresses from results
+    
+    Returns:
+        Tuple of (contacts_list, issues_list)
     """
     logging.info(f"[DATA_HANDLER] Loading contacts from Excel file: {file_path}")
     try:
@@ -104,6 +112,21 @@ def load_contacts_from_excel(file_path):
             contact_issues.append(f"Row {index + 2}: Invalid or missing email for '{name}' (Email: '{email}').") # +2 for header row and 0-indexing
 
     logging.info(f"[DATA_HANDLER] Processing complete - {len(contacts)} valid contacts, {len(contact_issues)} issues")
+    
+    # Filter out suppressed addresses if requested
+    if filter_suppressed:
+        suppression_manager = get_suppression_manager()
+        clean_contacts, suppressed_found = suppression_manager.filter_contacts(contacts)
+        
+        if suppressed_found:
+            contact_issues.append(
+                f"⚠️ Filtered {len(suppressed_found)} suppressed addresses "
+                f"(bounces, complaints, unsubscribes) from your list."
+            )
+            logging.info(f"[DATA_HANDLER] Removed {len(suppressed_found)} suppressed addresses")
+        
+        return clean_contacts, contact_issues
+    
     return contacts, contact_issues
 
 

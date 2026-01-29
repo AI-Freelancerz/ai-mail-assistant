@@ -1,6 +1,7 @@
 """
 Brevo Email Status Client
 Wrapper for Brevo API to fetch email event reports and transaction details.
+Automatically updates suppression list with bounces, complaints, and blocks.
 """
 
 import logging
@@ -9,6 +10,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 import brevo_python as sib_api_v3_sdk
 from brevo_python.rest import ApiException
+from suppression_list_manager import get_suppression_manager
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,7 @@ class BrevoStatusClient:
         self.configuration.api_key['api-key'] = api_key
         self.api_client = sib_api_v3_sdk.ApiClient(self.configuration)
         self.transactional_api = sib_api_v3_sdk.TransactionalEmailsApi(self.api_client)
+        self.suppression_manager = get_suppression_manager()
         
     def _retry_with_backoff(self, func, max_retries=3, initial_delay=1.0):
         """
@@ -166,6 +170,9 @@ class BrevoStatusClient:
                     }
                     events.append(normalized)
             
+            # Auto-update suppression list with problematic addresses
+            self._update_suppression_from_events(events)
+            
             # Get total count - Brevo doesn't always provide this, so estimate
             total = len(events) + offset
             
@@ -231,6 +238,79 @@ class BrevoStatusClient:
             logger.error(f"Unexpected error fetching email content: {str(e)}")
             raise
     
+    def _update_suppression_from_events(self, events: List[Dict]):
+        """
+        Automatically add problematic addresses to suppression list.
+
+        Suppresses emails that:
+        - Hard bounced (invalid address)
+        - Spam complained
+        - Blocked by ISP
+
+        Args:
+            events: List of email events
+        """
+        if not (config.EMAIL_AUTO_SUPPRESS_HARD_BOUNCE or 
+                config.EMAIL_AUTO_SUPPRESS_COMPLAINTS or 
+                config.EMAIL_AUTO_SUPPRESS_BLOCKS):
+            return
+        
+        to_suppress = []
+        
+        for event in events:
+            email = event.get('email', '').strip().lower()
+            event_type = event.get('event', '').lower()
+            reason = event.get('reason', '')
+            message_id = event.get('message_id', '')
+            
+            if not email:
+                continue
+            
+            # Hard bounces - invalid/non-existent email addresses
+            if config.EMAIL_AUTO_SUPPRESS_HARD_BOUNCE and 'hardbounce' in event_type:
+                to_suppress.append({
+                    'email': email,
+                    'reason': 'hardbounce',
+                    'campaign_id': message_id,
+                    'details': reason
+                })
+            
+            # Spam complaints - user marked as spam
+            elif config.EMAIL_AUTO_SUPPRESS_COMPLAINTS and 'spam' in event_type:
+                to_suppress.append({
+                    'email': email,
+                    'reason': 'spam_complaint',
+                    'campaign_id': message_id,
+                    'details': reason
+                })
+            
+            # Blocked by ISP or email provider
+            elif config.EMAIL_AUTO_SUPPRESS_BLOCKS and 'blocked' in event_type:
+                to_suppress.append({
+                    'email': email,
+                    'reason': 'blocked',
+                    'campaign_id': message_id,
+                    'details': reason
+                })
+            
+            # Unsubscribed (optional, usually handled separately)
+            elif 'unsubscribe' in event_type:
+                to_suppress.append({
+                    'email': email,
+                    'reason': 'unsubscribed',
+                    'campaign_id': message_id,
+                    'details': 'User unsubscribed'
+                })
+        
+        # Bulk add to suppression list
+        if to_suppress:
+            added, skipped = self.suppression_manager.add_bulk_to_suppression(to_suppress)
+            if added > 0:
+                logger.info(
+                    f"[SUPPRESSION] Auto-suppressed {added} addresses from events "
+                    f"(bounces/complaints/blocks)"
+                )
+
     def test_connection(self) -> Tuple[bool, str]:
         """
         Test the Brevo API connection.
@@ -275,3 +355,4 @@ def format_event_badge(event_type: str) -> str:
     
     color = colors.get(event_type.lower(), '#6c757d')
     return f'<span style="background-color: {color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; font-weight: 500;">{event_type}</span>'
+
