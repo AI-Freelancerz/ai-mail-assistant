@@ -568,7 +568,7 @@ def send_all_emails():
                     footer_html = f"""
                         <br>
                         <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 10px;">
-                            <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                            <p style="margin: 0; padding: 0;">Migdal France / 99 Av. Achille Peretti 92200 Neuilly-sur-Seine / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
                             <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
                         </div>
                     """
@@ -1060,13 +1060,13 @@ def page_preview():
                 footer_html = f"""
                     <br>
                     <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 10px;">
-                        <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                        <p style="margin: 0; padding: 0;">Migdal France / 99 Av. Achille Peretti 92200 Neuilly-sur-Seine / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
                         <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
                     </div>
                 """
                 
                 # Display the preview body normally
-                st.text_input(_t("Subject"), value=preview_subj, disabled=True, key="preview_subj_display")
+                st.text_input(_t("Subject"), value=preview_subj, disabled=True)
                 
                 # Display the email body normally
                 st.write(preview_body)
