@@ -282,7 +282,7 @@ def format_unsubscribe_footer(email: str, method: str = None) -> str:
 <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 40px; border-top: 1px solid #dddddd; padding-top: 20px;">
     <p style="margin: 5px 0;">
         <strong>Migdal France</strong><br>
-        38 rue Servan, 75011 Paris<br>
+        99 Av. Achille Peretti 92200 Neuilly-sur-Seine<br>
         <a href="http://www.migdal.org" style="color: #4A90E2; text-decoration: none;">www.migdal.org</a>
     </p>
     <p style="margin: 15px 0;">

@@ -215,6 +215,9 @@ def init_state():
         st.session_state.detailed_response = None
         st.session_state.generation_in_progress = False
         st.session_state.sending_in_progress = False
+        st.session_state.use_ai_mode = True  # True for AI, False for Manual
+        st.session_state.manual_subject = ''
+        st.session_state.manual_body = ''
         st.session_state.user_prompt = ''
         st.session_state.user_email_context = ''
         st.session_state.personalize_emails = False
@@ -568,7 +571,7 @@ def send_all_emails():
                     footer_html = f"""
                         <br>
                         <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 10px;">
-                            <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                            <p style="margin: 0; padding: 0;">Migdal France / 99 Av. Achille Peretti 92200 Neuilly-sur-Seine / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
                             <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
                         </div>
                     """
@@ -821,35 +824,77 @@ def page_generate():
 
     if st.session_state.show_generation_section:
         st.markdown("---")
-
-        st.markdown(f"**{_t('AI Instruction: Describe the email you want to generate.')}**")
-        st.session_state.user_prompt = st.text_area(
-            _t("e.g., 'Draft a newsletter about our new product features.'"),
-            value=st.session_state.user_prompt,
-            height=100,
-            key="user_prompt_input"
-        )
-
-        st.markdown(f"**{_t('Email Context (optional): Add style, tone, or specific details.')}**")
-        st.session_state.user_email_context = st.text_area(
-            _t("e.g., 'Friendly tone, include a call to action to visit our website.'"),
-            value=st.session_state.user_email_context,
-            height=80,
-            key="user_email_context_input"
-        )
-
-        st.session_state.personalize_emails = st.checkbox(
-            _t("Personalize emails?"),
-            value=st.session_state.personalize_emails,
-            key="personalize_emails_checkbox"
-        )
         
-        if not st.session_state.personalize_emails:
-            st.session_state.generic_greeting = st.text_input(
-                _t("Generic Greeting (e.g., 'Dear Valued Customer')"),
-                value=st.session_state.generic_greeting,
-                placeholder=_t("Enter a generic greeting if not personalizing"),
-                key="generic_greeting_input"
+        # Mode selection: AI or Manual
+        st.markdown(f"**{_t('Email Composition Mode')}**")
+        mode_options = [_t("Use AI Generation"), _t("Manual Entry (Skip AI)")]
+        selected_mode = st.radio(
+            _t("Choose how to compose your email:"),
+            mode_options,
+            index=0 if st.session_state.use_ai_mode else 1,
+            key="mode_selection_radio",
+            horizontal=True
+        )
+        st.session_state.use_ai_mode = (selected_mode == mode_options[0])
+        
+        st.markdown("---")
+        
+        # AI Mode Fields
+        if st.session_state.use_ai_mode:
+            st.markdown(f"**{_t('AI Instruction: Describe the email you want to generate.')}**")
+            st.session_state.user_prompt = st.text_area(
+                _t("e.g., 'Draft a newsletter about our new product features.'"),
+                value=st.session_state.user_prompt,
+                height=100,
+                key="user_prompt_input"
+            )
+
+            st.markdown(f"**{_t('Email Context (optional): Add style, tone, or specific details.')}**")
+            st.session_state.user_email_context = st.text_area(
+                _t("e.g., 'Friendly tone, include a call to action to visit our website.'"),
+                value=st.session_state.user_email_context,
+                height=80,
+                key="user_email_context_input"
+            )
+
+            st.session_state.personalize_emails = st.checkbox(
+                _t("Personalize emails?"),
+                value=st.session_state.personalize_emails,
+                key="personalize_emails_checkbox"
+            )
+            
+            if not st.session_state.personalize_emails:
+                st.session_state.generic_greeting = st.text_input(
+                    _t("Generic Greeting (e.g., 'Dear Valued Customer')"),
+                    value=st.session_state.generic_greeting,
+                    placeholder=_t("Enter a generic greeting if not personalizing"),
+                    key="generic_greeting_input"
+                )
+        
+        # Manual Mode Fields
+        else:
+            st.markdown(f"**{_t('Compose Your Email Manually')}**")
+            st.info(_t("💡 You can use placeholders like {{Name}}, {{Nom}}, {{Email}}, {{Courriel}} for personalization."))
+            
+            st.session_state.manual_subject = st.text_input(
+                _t("Email Subject"),
+                value=st.session_state.manual_subject,
+                placeholder=_t("Enter your email subject here"),
+                key="manual_subject_input"
+            )
+            
+            st.session_state.manual_body = st.text_area(
+                _t("Email Body"),
+                value=st.session_state.manual_body,
+                height=300,
+                placeholder=_t("Enter your email content here. You can use HTML formatting."),
+                key="manual_body_input"
+            )
+            
+            st.session_state.personalize_emails = st.checkbox(
+                _t("Enable personalization (replace {{Name}}, {{Email}} placeholders)"),
+                value=st.session_state.personalize_emails,
+                key="manual_personalize_checkbox"
             )
 
         ### UPDATED FEATURE: Enhanced Custom Button Options ###
@@ -901,17 +946,39 @@ def page_generate():
         ### END UPDATED FEATURE ###
 
         st.markdown("---")
+        
+        # Dynamic button label based on mode
+        button_label = _t("Generate with AI") if st.session_state.use_ai_mode else _t("Continue to Preview")
+        
         if st.button(
-            _t("Generate Email"),
+            button_label,
             use_container_width=True,
             key="generate_email_button",
             disabled=st.session_state.generation_in_progress,
             type="primary"
         ):
-            if st.session_state.user_prompt:
-                generate_email_preview_and_template()
+            if st.session_state.use_ai_mode:
+                # AI Mode: Validate prompt and generate
+                if st.session_state.user_prompt:
+                    generate_email_preview_and_template()
+                else:
+                    st.warning(_t("Please provide instructions for the AI to generate the email."))
             else:
-                st.warning(_t("Please provide instructions for the AI to generate the email."))
+                # Manual Mode: Validate manual fields and navigate to preview
+                if not st.session_state.manual_subject.strip():
+                    st.warning(_t("Please enter an email subject."))
+                elif not st.session_state.manual_body.strip():
+                    st.warning(_t("Please enter email body content."))
+                else:
+                    # Populate editable fields from manual input
+                    st.session_state.editable_subject = st.session_state.manual_subject
+                    st.session_state.editable_body = st.session_state.manual_body
+                    st.session_state.template_subject = st.session_state.manual_subject
+                    st.session_state.template_body = st.session_state.manual_body
+                    st.session_state.email_generated = True
+                    # Navigate to preview page
+                    st.session_state.page = 'preview'
+                    st.rerun()
 
 
 # --- Page: Preview ---
@@ -1060,13 +1127,13 @@ def page_preview():
                 footer_html = f"""
                     <br>
                     <div style="text-align: center; font-size: 12px; color: #888888; margin-top: 10px;">
-                        <p style="margin: 0; padding: 0;">Migdal France / 38 rue servan 75011 Paris / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
+                        <p style="margin: 0; padding: 0;">Migdal France / 99 Av. Achille Peretti 92200 Neuilly-sur-Seine / tel: 0749589118 / <a href="http://www.migdal.org" style="color: #888888;">www.migdal.org</a></p>
                         <p style="margin: 0; padding: 0;"><a href="{unsubscribe_url}" style="color: #888888;">Se désinscrire</a></p>
                     </div>
                 """
                 
                 # Display the preview body normally
-                st.text_input(_t("Subject"), value=preview_subj, disabled=True, key="preview_subj_display")
+                st.text_input(_t("Subject"), value=preview_subj, disabled=True)
                 
                 # Display the email body normally
                 st.write(preview_body)
