@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 secrets.toml
 .vscode/suppression_list.csv
+data/
+logs/
