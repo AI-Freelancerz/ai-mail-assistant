@@ -80,7 +80,15 @@ class BrevoCache:
                     updated_at TEXT NOT NULL
                 )
             """)
-            
+
+            # Deleted campaigns table - stores hidden campaign IDs
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS deleted_campaigns (
+                    campaign_batch_id TEXT PRIMARY KEY,
+                    deleted_at TEXT NOT NULL
+                )
+            """)
+
             # Create indices for fast queries
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_events_message_id 
@@ -372,9 +380,47 @@ class BrevoCache:
                 conn.commit()
                 
                 logger.info(f"Cleared {deleted_count} events older than {days} days")
-                
+
         except Exception as e:
             logger.error(f"Error clearing old cache: {e}")
+
+    def delete_campaign(self, campaign_batch_id: str) -> bool:
+        """
+        Permanently delete a campaign by marking it as deleted.
+        Also removes it from the events and campaigns tables to save space.
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                deleted_at = datetime.now(timezone.utc).isoformat()
+
+                # Mark as deleted
+                cursor.execute("""
+                    INSERT OR IGNORE INTO deleted_campaigns (campaign_batch_id, deleted_at)
+                    VALUES (?, ?)
+                """, (campaign_batch_id,))
+
+                # Remove from other tables
+                cursor.execute("DELETE FROM email_events WHERE campaign_batch_id = ?", (campaign_batch_id,))
+                cursor.execute("DELETE FROM campaigns WHERE campaign_batch_id = ?", (campaign_batch_id,))
+
+                conn.commit()
+                logger.info(f"Permanently deleted campaign: {campaign_batch_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error deleting campaign: {e}")
+            return False
+
+    def get_deleted_campaigns(self) -> set:
+        """Return a set of all deleted campaign batch IDs."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT campaign_batch_id FROM deleted_campaigns")
+                return {row[0] for row in cursor.fetchall()}
+        except Exception as e:
+            logger.error(f"Error retrieving deleted campaigns: {e}")
+            return set()
 
 
 # Global cache instance

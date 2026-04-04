@@ -84,7 +84,11 @@ def main():
     if "time_filter" not in st.session_state:
         st.session_state.time_filter = "3days"  # Default to last 3 days to show recent campaigns
     if "deleted_campaigns" not in st.session_state:
-        st.session_state.deleted_campaigns = set()
+        try:
+            from campaign_cache import get_cache
+            st.session_state.deleted_campaigns = get_cache().get_deleted_campaigns()
+        except Exception:
+            st.session_state.deleted_campaigns = set()
 
     # Apply language from main app if available
     if "language" in st.session_state:
@@ -1246,9 +1250,15 @@ def main():
                         with delete_col:
                             if st.button("🗑️", key=f"delete_{group_key}", help=_t("Delete (Hide) Campaign")):
                                 st.session_state.deleted_campaigns.add(group_key)
+                                try:
+                                    if getattr(client, "cache", None) is not None:
+                                        client.cache.delete_campaign(group_key)
+                                except Exception as e:
+                                    import logging
+                                    logging.getLogger(__name__).error(f"Failed to permanently delete campaign: {e}")
                                 st.session_state.selected_campaign = None
                                 st.rerun()
-                        
+
                         # Format timestamp
                         date_str = group["last_event_date"]
                         if date_str and date_str != "N/A":
