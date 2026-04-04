@@ -8,9 +8,19 @@ import logging
 import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
-import brevo_python as sib_api_v3_sdk
-from brevo_python.rest import ApiException
+try:
+    import brevo_python as sib_api_v3_sdk
+    from brevo_python.rest import ApiException
+except ModuleNotFoundError:
+    try:
+        import sib_api_v3_sdk
+        from sib_api_v3_sdk.rest import ApiException
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "Brevo SDK not installed. Install 'brevo-python' or 'sib-api-v3-sdk'."
+        ) from exc
 from suppression_list_manager import get_suppression_manager
+from campaign_cache import get_cache
 import config
 
 logger = logging.getLogger(__name__)
@@ -19,19 +29,30 @@ logger = logging.getLogger(__name__)
 class BrevoStatusClient:
     """Client for fetching email status and events from Brevo API."""
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, use_cache: bool = True, cache_ttl_minutes: int = 15):
         """
         Initialize the Brevo status client.
         
         Args:
             api_key: Brevo API key
+            use_cache: Enable caching to reduce API calls
+            cache_ttl_minutes: Cache time-to-live in minutes
         """
         self.api_key = api_key
+        self.use_cache = use_cache
         self.configuration = sib_api_v3_sdk.Configuration()
         self.configuration.api_key['api-key'] = api_key
         self.api_client = sib_api_v3_sdk.ApiClient(self.configuration)
         self.transactional_api = sib_api_v3_sdk.TransactionalEmailsApi(self.api_client)
         self.suppression_manager = get_suppression_manager()
+        
+        # Initialize cache if enabled
+        if self.use_cache:
+            self.cache = get_cache(cache_ttl_minutes=cache_ttl_minutes)
+            logger.info(f"Cache enabled with TTL of {cache_ttl_minutes} minutes")
+        else:
+            self.cache = None
+            logger.info("Cache disabled")
         
     def _retry_with_backoff(self, func, max_retries=3, initial_delay=1.0):
         """
@@ -92,10 +113,11 @@ class BrevoStatusClient:
         email: Optional[str] = None,
         event: Optional[str] = None,
         tags: Optional[str] = None,
-        sort: str = "desc"
+        sort: str = "desc",
+        force_refresh: bool = False
     ) -> Tuple[List[Dict], int]:
         """
-        Fetch email event reports from Brevo.
+        Fetch email event reports from Brevo with caching.
         
         Args:
             limit: Maximum number of events to return (max 100)
@@ -106,10 +128,24 @@ class BrevoStatusClient:
             event: Filter by event type (e.g., 'delivered', 'opened', 'clicked', 'bounce')
             tags: Filter by tags
             sort: Sort order ('asc' or 'desc')
+            force_refresh: Force API fetch even if cache is fresh
             
         Returns:
             Tuple of (list of normalized event dicts, total count)
         """
+        # Check cache first (only for date-range queries without specific filters)
+        if (self.use_cache and self.cache and start_date and end_date and 
+            not email and not event and not tags and not force_refresh):
+            
+            if self.cache.is_cache_fresh(start_date, end_date):
+                logger.info("✅ Cache HIT: Using cached events (cache is fresh)")
+                cached_events, cached_total = self.cache.get_cached_events(start_date, end_date)
+                logger.info(f"   Retrieved {cached_total} events from cache")
+                return cached_events, cached_total
+            else:
+                logger.info("❌ Cache MISS: Cache is stale or empty, fetching from API")
+        
+        # Fetch from API with smart pagination and rate limiting
         try:
             # Format dates to ISO format if provided
             # Brevo API only accepts date format (YYYY-MM-DD), not datetime
@@ -119,7 +155,7 @@ class BrevoStatusClient:
             # Limit to max 100 per API requirements
             limit = min(limit, 100)
             
-            logger.info(f"Fetching email events: limit={limit}, offset={offset}, start={start_date_str}, end={end_date_str}, email={email}, event={event}")
+            logger.info(f"Fetching email events from API: limit={limit}, offset={offset}, start={start_date_str}, end={end_date_str}")
             
             def fetch():
                 # Build kwargs dict, only including non-None values
@@ -173,6 +209,9 @@ class BrevoStatusClient:
             # Auto-update suppression list with problematic addresses
             self._update_suppression_from_events(events)
             
+            # Note: Caching is now handled at the get_email_events_paginated() level
+            # to avoid partial page caching issues
+            
             # Get total count - Brevo doesn't always provide this, so estimate
             total = len(events) + offset
             
@@ -204,6 +243,104 @@ class BrevoStatusClient:
         except Exception as e:
             logger.error(f"Unexpected error fetching email events: {str(e)}", exc_info=True)
             raise
+    
+    def get_email_events_paginated(
+        self,
+        max_events: int = 500,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        email: Optional[str] = None,
+        event: Optional[str] = None,
+        tags: Optional[str] = None,
+        sort: str = "desc",
+        force_refresh: bool = False,
+        pagination_delay: float = 0.6
+    ) -> Tuple[List[Dict], int]:
+        """
+        Fetch email events with smart pagination and rate limiting.
+        
+        Args:
+            max_events: Maximum total events to fetch
+            start_date: Start date for filtering
+            end_date: End date for filtering
+            email: Filter by email
+            event: Filter by event type
+            tags: Filter by tags
+            sort: Sort order
+            force_refresh: Force API refresh
+            pagination_delay: Delay between pagination requests (default 0.6s for safety)
+            
+        Returns:
+            Tuple of (list of all events, total count)
+        """
+        logger.info(f"Fetching up to {max_events} events with pagination (delay={pagination_delay}s between pages)")
+        
+        # Check cache ONCE at this level (not per-page) to avoid pagination issues
+        if (self.use_cache and self.cache and start_date and end_date and 
+            not email and not event and not tags and not force_refresh):
+            
+            if self.cache.is_cache_fresh(start_date, end_date):
+                logger.info("✅ Cache HIT: Using cached events (cache is fresh)")
+                cached_events, cached_total = self.cache.get_cached_events(start_date, end_date)
+                logger.info(f"   Retrieved {cached_total} events from cache")
+                return cached_events, cached_total
+            else:
+                logger.info("❌ Cache MISS: Cache is stale or empty, fetching from API")
+        
+        # Fetch from API with pagination
+        all_events = []
+        page_offset = 0
+        page_limit = 100  # Brevo API max per request
+        
+        while len(all_events) < max_events:
+            # Fetch one page - use force_refresh=True to bypass cache at page level
+            events_page, total = self.get_email_events(
+                limit=page_limit,
+                offset=page_offset,
+                start_date=start_date,
+                end_date=end_date,
+                email=email,
+                event=event,
+                tags=tags,
+                sort=sort,
+                force_refresh=True  # Always bypass cache here - we already checked above
+            )
+            
+            if not events_page:
+                # No more events available
+                logger.info("No more events available")
+                break
+            
+            all_events.extend(events_page)
+            logger.info(f"Fetched page at offset {page_offset}: {len(events_page)} events (total so far: {len(all_events)})")
+            
+            # If we got fewer events than requested, we've reached the end
+            if len(events_page) < page_limit:
+                logger.info("Reached end of available events")
+                break
+            
+            page_offset += page_limit
+            
+            # Don't fetch more pages if we've hit our limit
+            if page_offset >= max_events:
+                logger.info(f"Reached max_events limit of {max_events}")
+                break
+            
+            # Smart rate limiting: add delay between pagination requests
+            # This prevents hitting rate limits proactively
+            if page_offset < max_events and len(events_page) == page_limit:
+                logger.debug(f"Pausing {pagination_delay}s before next page to avoid rate limiting")
+                time.sleep(pagination_delay)
+        
+        # Store ALL fetched events in cache (if caching enabled)
+        if self.use_cache and self.cache and start_date and end_date and all_events:
+            from email_status_page import extract_message_batch
+            self.cache.store_events(all_events, extract_message_batch)
+            self.cache.update_cache_metadata(start_date, end_date)
+            logger.info(f"Stored {len(all_events)} events in cache for future use")
+        
+        logger.info(f"Total events fetched: {len(all_events)}")
+        return all_events, len(all_events)
     
     def get_email_content(self, uuid: str) -> Optional[Dict]:
         """
