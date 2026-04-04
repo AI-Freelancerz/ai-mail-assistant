@@ -4,4 +4,4 @@ dummy_contacts_email.xlsx
 __pycache__/
 *.pyc
 secrets.toml
-.vscode/
+.vscode/suppression_list.csv
