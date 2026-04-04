@@ -8,5 +8,6 @@ openpyxl
 streamlit>=1.29.0
 altair<5
 brevo-python
+sib-api-v3-sdk
 android-sms-gateway
 streamlit-authenticator

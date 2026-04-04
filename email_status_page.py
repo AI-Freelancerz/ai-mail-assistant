@@ -9,7 +9,15 @@ from datetime import datetime, timedelta, timezone
 import logging
 import os
 import re
-from brevo_python.rest import ApiException
+try:
+    from brevo_python.rest import ApiException
+except ModuleNotFoundError:
+    try:
+        from sib_api_v3_sdk.rest import ApiException
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "Brevo SDK not installed. Install 'brevo-python' or 'sib-api-v3-sdk'."
+        ) from exc
 
 from brevo_status_client import BrevoStatusClient
 from translations import _t, set_language
@@ -74,7 +82,9 @@ def main():
     if "include_filters" not in st.session_state:
         st.session_state.include_filters = ""
     if "time_filter" not in st.session_state:
-        st.session_state.time_filter = "1h"  # Default to last hour
+        st.session_state.time_filter = "3days"  # Default to last 3 days to show recent campaigns
+    if "deleted_campaigns" not in st.session_state:
+        st.session_state.deleted_campaigns = set()
 
     # Apply language from main app if available
     if "language" in st.session_state:
@@ -367,6 +377,8 @@ def main():
             "1h": _t("Last hour"),
             "24h": _t("Last 24 hours"),
             "48h": _t("Last 48 hours"),
+            "3days": _t("Last 3 days"),
+            "5days": _t("Last 5 days"),
             "7days": _t("Last 7 days"),
             "3months": _t("Last 3 months")
         }
@@ -385,6 +397,51 @@ def main():
     # --- NEW: View Options for Filtering ---
     with st.expander(_t("⚙️ View Options & Filters")):
         st.info(_t("Exclude test emails or filter to specific campaigns. This does not delete any data."))
+        
+        # Add cache control buttons
+        col_refresh, col_clear, col_strict = st.columns(3)
+        with col_refresh:
+            if st.button(_t("🔄 Force Refresh"), help=_t("Bypass cache and fetch fresh data from Brevo API"), use_container_width=True):
+                st.session_state.force_refresh = True
+                st.rerun()
+        
+        with col_clear:
+            if st.button(_t("🗑️ Clear Cache"), help=_t("Delete cached data and fetch everything fresh"), type="secondary", use_container_width=True):
+                try:
+                    import os
+                    import glob
+                    
+                    # Delete the main cache file
+                    cache_path = "./data/campaign_cache.db"
+                    deleted = False
+                    if os.path.exists(cache_path):
+                        os.remove(cache_path)
+                        deleted = True
+                    
+                    # Also delete any SQLite temp files
+                    for temp_file in glob.glob("./data/campaign_cache.db-*"):
+                        try:
+                            os.remove(temp_file)
+                        except:
+                            pass
+                    
+                    if deleted:
+                        st.success(_t("✅ Cache cleared! Click 'Force Refresh' to fetch fresh data"))
+                        # Don't auto-refresh, let user click Force Refresh manually
+                    else:
+                        st.info(_t("No cache file found"))
+                except Exception as e:
+                    st.error(f"Error clearing cache: {e}")
+        
+        with col_strict:
+            # Add checkbox for strict time filtering
+            use_strict_time_filter = st.checkbox(
+                _t("Use strict time filtering (only show emails sent in exact time range)"),
+                value=False,
+                help=_t("When unchecked, shows all emails from the API fetch period, even if sent slightly outside the time range. Recommended to keep unchecked to see all recent campaigns.")
+            )
+        
+        st.markdown("---")
         
         col_exclude, col_include = st.columns(2)
         
@@ -485,12 +542,20 @@ def main():
         api_start_date = (now_utc - timedelta(days=2)).replace(tzinfo=None)
     elif st.session_state.time_filter == "48h":
         start_date = now_utc - timedelta(hours=48)
-        # Fetch last 3 days to cover timezone differences
-        api_start_date = (now_utc - timedelta(days=3)).replace(tzinfo=None)
+        # Fetch last 5 days to ensure we capture all recent campaigns
+        api_start_date = (now_utc - timedelta(days=5)).replace(tzinfo=None)
+    elif st.session_state.time_filter == "3days":
+        start_date = now_utc - timedelta(days=3)
+        # Fetch 7 days to ensure we capture ALL recent campaigns
+        api_start_date = (now_utc - timedelta(days=7)).replace(tzinfo=None)
+    elif st.session_state.time_filter == "5days":
+        start_date = now_utc - timedelta(days=5)
+        # Fetch 10 days to ensure we capture all campaigns
+        api_start_date = (now_utc - timedelta(days=10)).replace(tzinfo=None)
     elif st.session_state.time_filter == "7days":
         start_date = now_utc - timedelta(days=7)
-        # Fetch 8 days to cover timezone differences
-        api_start_date = (now_utc - timedelta(days=8)).replace(tzinfo=None)
+        # Fetch 14 days to ensure we capture ALL campaigns from past week
+        api_start_date = (now_utc - timedelta(days=14)).replace(tzinfo=None)
     else:  # 3months
         start_date = now_utc - timedelta(days=90)
         # For 3 months, use exactly 90 days (Brevo's maximum)
@@ -500,79 +565,91 @@ def main():
     api_end_date = end_date.replace(tzinfo=None)
     
     # Adjust limit based on time range to ensure we fetch all events
-    # Brevo API maximum is 500 events per request
+    # Note: Brevo API maximum is 100 per request; we paginate up to this cap.
     if st.session_state.time_filter == "1h":
-        limit = 100  # 1 hour, 100 should be enough
+        limit = 300  # Short range but allow larger campaigns
     elif st.session_state.time_filter == "24h":
-        limit = 300  # 24 hours, need more
+        limit = 1000  # 24 hours can include multiple 300+ campaigns
     elif st.session_state.time_filter == "48h":
-        limit = 500  # 48 hours, need even more (API max)
+        limit = 2000  # 48 hours, allow several campaigns
+    elif st.session_state.time_filter == "3days":
+        limit = 3000  # 3 days worth of emails
+    elif st.session_state.time_filter == "5days":
+        limit = 4000  # 5 days worth of emails
     elif st.session_state.time_filter == "7days":
-        limit = 500  # 7 days, use API maximum
+        limit = 5000  # 7 days, allow more campaigns
     else:  # 3months
-        limit = 500  # 3 months, use API maximum
+        limit = 8000  # 3 months, larger cap with pagination
     
-    event_filter = None
+    # Event type filter
+    event_filter_options = {
+        "All Events": None,
+        "✅ Delivered Only": "delivered",
+        "📧 Sent (Request)": "request",
+        "📖 Opened": "opened",
+        "🖱️ Clicked": "click",
+        "❌ Hard Bounce": "hard_bounce",
+        "⚠️ Soft Bounce": "soft_bounce",
+        "🚫 Blocked": "blocked"
+    }
+    
+    event_filter_choice = st.selectbox(
+        _t("Filter by Event Type"),
+        options=list(event_filter_options.keys()),
+        index=0,  # Default to "All Events"
+        help=_t("Filter events by type. Select 'Delivered Only' to match Brevo's delivered count.")
+    )
+    event_filter = event_filter_options[event_filter_choice]
+    
     email_search = None
 
     # Main content
     try:
         with st.spinner(_t("Fetching email events from Brevo...")):
-            # Fetch events with pagination to get all data
-            # Brevo API limit is 100 per request, so we need to paginate for longer time ranges
-            all_events = []
-            page_offset = 0
-            page_limit = 100  # Max per Brevo API
-            max_events = limit  # Total events we want
+            # Use smart pagination with rate limiting to avoid 429 errors
+            events, total = client.get_email_events_paginated(
+                max_events=limit,
+                start_date=api_start_date,
+                end_date=api_end_date,
+                email=email_search if email_search else None,
+                event=event_filter,
+                sort="desc",
+                force_refresh=st.session_state.get('force_refresh', False),
+                pagination_delay=0.6  # 600ms delay between pages to avoid rate limits
+            )
             
-            # Keep fetching until we have enough or no more events
-            while len(all_events) < max_events:
-                events_page, total = client.get_email_events(
-                    limit=page_limit,
-                    offset=page_offset,
-                    start_date=api_start_date,
-                    end_date=api_end_date,
-                    email=email_search if email_search else None,
-                    event=event_filter,
-                    sort="desc",
-                )
-                
-                if not events_page:
-                    # No more events available
-                    break
-                
-                all_events.extend(events_page)
-                
-                # If we got fewer events than requested, we've reached the end
-                if len(events_page) < page_limit:
-                    break
-                
-                page_offset += page_limit
-                
-                # Safety check: don't fetch more than 1000 events total
-                if page_offset >= 1000:
-                    st.warning(_t("⚠️ Stopped at 1000 events to avoid excessive API calls. Use filters for more specific results."))
-                    break
+            # Reset force_refresh flag
+            if 'force_refresh' in st.session_state:
+                st.session_state.force_refresh = False
             
-            events = all_events
+            # LOG CHECKPOINT 1: Raw API fetch results
+            logger.info(f"\n{'='*60}")
+            logger.info(f"CHECKPOINT 1: Raw API Fetch")
+            logger.info(f"API date range: {api_start_date.strftime('%Y-%m-%d')} to {api_end_date.strftime('%Y-%m-%d')}")
+            logger.info(f"Filter date range: {start_date.strftime('%Y-%m-%d %H:%M UTC')} to {end_date.strftime('%Y-%m-%d %H:%M UTC')}")
+            logger.info(f"Events fetched from API: {len(events)}")
+            logger.info(f"{'='*60}\n")
 
         # --- NEW: Filter events by exact time range (client-side filtering) ---
-        # This is needed because Brevo API only accepts date, not datetime
-        # Strategy: Filter by SEND time (request/delivered events), not by any activity
-        # Then include ALL events for those message_ids to maintain data consistency
-        
-        # Step 1: Find message_ids where the email was SENT in the time range
-        # We look for 'request' or 'delivered' events as these indicate send time
-        message_ids_in_range = set()
-        for event in events:
-            event_type_raw = event.get("event", "").lower()
+        # Only apply strict filtering if user has enabled it
+        if use_strict_time_filter:
+            # This is needed because Brevo API only accepts date, not datetime
+            # Strategy: Be lenient - include emails based on ANY event in the time range
+            # This ensures we don't miss emails due to timestamp variations
             
-            # Only check send-related events (request or delivered)
-            if event_type_raw not in ['request', 'requests', 'delivered']:
-                continue
+            # Step 1: Find ALL message_ids with ANY event in the time range
+            # First pass: look for send-related events (preferred)
+            message_ids_in_range = set()
+            message_ids_with_any_event = set()
             
-            event_date_str = event.get("date", "")
-            if event_date_str:
+            for event in events:
+                event_type_raw = event.get("event", "").lower()
+                event_date_str = event.get("date", "")
+                msg_id = event.get("message_id")
+                
+                if not event_date_str or not msg_id:
+                    continue
+                
                 try:
                     # Parse the event date - Brevo returns ISO format like "2025-11-06T14:30:45.000Z"
                     if 'T' in event_date_str:
@@ -594,24 +671,88 @@ def main():
                     if event_datetime.tzinfo is None:
                         event_datetime = event_datetime.replace(tzinfo=timezone.utc)
                     
-                    # Check if email was sent within our time range
+                    # Check if event is within our time range
                     if start_date <= event_datetime <= end_date:
-                        message_ids_in_range.add(event.get("message_id"))
+                        message_ids_with_any_event.add(msg_id)
+                        
+                        # Prefer send-related events for primary filtering
+                        if event_type_raw in ['request', 'requests', 'delivered']:
+                            message_ids_in_range.add(msg_id)
+                            
                 except (ValueError, AttributeError) as e:
                     # If we can't parse the date, include this message_id to be safe
                     logger.warning(f"Could not parse event date '{event_date_str}': {e}")
-                    message_ids_in_range.add(event.get("message_id"))
-        
-        # Step 2: Include ALL events for message_ids that were sent in the time range
-        filtered_by_time = [event for event in events if event.get("message_id") in message_ids_in_range]
-        
-        # Log filtering results for debugging
-        logger.info(f"Time filter '{st.session_state.time_filter}': {len(events)} events fetched from API, "
-                   f"{len(message_ids_in_range)} unique emails sent in range, "
-                   f"{len(filtered_by_time)} total events after filtering")
-        logger.info(f"Time range: {start_date.isoformat()} to {end_date.isoformat()}")
-        
-        events = filtered_by_time
+                    message_ids_with_any_event.add(msg_id)
+            
+            # If we have send-related events, use those; otherwise use any event
+            # This handles cases where only opens/clicks are in range
+            if message_ids_in_range:
+                final_message_ids = message_ids_in_range
+            else:
+                final_message_ids = message_ids_with_any_event
+            
+            # Step 2: Include ALL events for message_ids that have activity in the time range
+            filtered_by_time = [event for event in events if event.get("message_id") in final_message_ids]
+            
+            # Log filtering results for debugging
+            logger.info(f"Time filter '{st.session_state.time_filter}' (strict={use_strict_time_filter}): {len(events)} events fetched from API, "
+                       f"{len(final_message_ids)} unique emails in range, "
+                       f"{len(filtered_by_time)} total events after filtering")
+            logger.info(f"Time range: {start_date.isoformat()} to {end_date.isoformat()}")
+            
+            # Display fetch statistics in an expander for debugging
+            with st.expander("📊 " + _t("Fetch Statistics"), expanded=True):
+                st.markdown(f"""
+                #### API Fetch
+                - **Events Fetched from API**: {len(events):,}
+                - **API Date Range**: {api_start_date.strftime('%Y-%m-%d')} to {api_end_date.strftime('%Y-%m-%d')}
+                
+                #### Time Filtering
+                - **Strict Time Filtering**: {'✅ Enabled' if use_strict_time_filter else '❌ Disabled'}
+                - **Filter Time Range**: {start_date.strftime('%Y-%m-%d %H:%M UTC')} to {end_date.strftime('%Y-%m-%d %H:%M UTC')}
+                - **Unique Emails in Range**: {len(final_message_ids):,}
+                - **Events After Time Filter**: {len(filtered_by_time):,}
+                
+                #### Summary
+                - **Total Unique Recipients (message_ids)**: {len(set(e.get('message_id') for e in filtered_by_time)):,}
+                - **Event-to-Recipient Ratio**: {len(filtered_by_time) / len(set(e.get('message_id') for e in filtered_by_time)):.2f}:1 (normal: 1.5-2:1)
+                """)
+                
+                if len(events) > 0 and len(filtered_by_time) < len(events) * 0.3:
+                    st.error(_t("🚨 More than 70% of fetched events were filtered out! This may indicate a problem."))
+                elif len(events) > 0 and len(filtered_by_time) < len(events) * 0.5:
+                    st.warning(_t("⚠️ More than 50% of fetched events were filtered out. Consider selecting a longer time range."))
+
+            
+            events = filtered_by_time
+            
+            # LOG CHECKPOINT 2: After time filtering
+            logger.info(f"\n{'='*60}")
+            logger.info(f"CHECKPOINT 2: After Time Filtering (Strict Mode)")
+            logger.info(f"Events before time filter: {len(all_events) if 'all_events' in locals() else 'N/A'}")
+            logger.info(f"Events after time filter: {len(events)}")
+            logger.info(f"Filtered out: {(len(all_events) - len(events)) if 'all_events' in locals() else 'N/A'}")
+            logger.info(f"{'='*60}\n")
+        else:
+            # No strict filtering - show all fetched events
+            logger.info(f"\n{'='*60}")
+            logger.info(f"CHECKPOINT 2: After Time Filtering (No Strict Filter)")
+            logger.info(f"Showing all {len(events)} fetched events (strict filtering disabled)")
+            logger.info(f"{'='*60}\n")
+            
+            with st.expander("📊 " + _t("Fetch Statistics"), expanded=True):
+                st.markdown(f"""
+                #### API Fetch
+                - **Events Fetched from API**: {len(events):,}
+                - **API Date Range**: {api_start_date.strftime('%Y-%m-%d')} to {api_end_date.strftime('%Y-%m-%d')}
+                
+                #### Time Filtering
+                - **Strict Time Filtering**: ❌ Disabled (showing ALL fetched events)
+                - **Filter Time Range**: {start_date.strftime('%Y-%m-%d %H:%M UTC')} to {end_date.strftime('%Y-%m-%d %H:%M UTC')}
+                
+                #### Summary
+                - **Total Unique Recipients**: {len(set(e.get('message_id') for e in events)):,}
+                """)
         # --- END NEW ---
 
         # --- NEW: Filter out excluded events ---
@@ -659,6 +800,14 @@ def main():
             
             events = filtered_events  # Overwrite with the filtered list
             
+            # LOG CHECKPOINT 3: After exclusion/inclusion filtering
+            logger.info(f"\n{'='*60}")
+            logger.info(f"CHECKPOINT 3: After Exclusion/Inclusion Filtering")
+            logger.info(f"Events before filter: {original_count}")
+            logger.info(f"Events after filter: {len(events)}")
+            logger.info(f"Excluded: {excluded_count}, Inclusion filtered: {included_count}")
+            logger.info(f"{'='*60}\n")
+            
             if excluded_count > 0 or included_count > 0:
                 filter_msg = []
                 if excluded_count > 0:
@@ -669,6 +818,14 @@ def main():
         # --- END NEW ---
 
         if events:
+            # LOG CHECKPOINT 4: Before grouping
+            logger.info(f"\n{'='*60}")
+            logger.info(f"CHECKPOINT 4: Starting Email Grouping")
+            logger.info(f"Total events to process: {len(events)}")
+            if len(events) > 0:
+                logger.info(f"Sample event: {events[0]}")
+            logger.info(f"{'='*60}\n")
+            
             st.markdown("### " + _t("Summary"))
 
             # Group by message_id
@@ -704,12 +861,15 @@ def main():
                 event_type_lower = event_type_raw.lower() if event_type_raw else ""
                 
                 # Map all variations to canonical event types
+                # NOTE: loadedByProxy is NOT a real open - it's privacy protection from email clients
                 event_type_map = {
                     'request': 'requests',
                     'requests': 'requests',
                     'delivered': 'delivered',
+                    'delivery': 'delivered',
                     'open': 'opened',
                     'opened': 'opened',
+                    'unique_opened': 'opened',
                     'click': 'clicks',
                     'clicks': 'clicks',
                     'hard_bounce': 'hardBounces',
@@ -724,9 +884,16 @@ def main():
                     'unsubscribed': 'unsubscribed',
                     'unsubscribe': 'unsubscribed',
                     'error': 'error',
+                    # Explicitly ignore proxy loads - they're not real opens
+                    'loadedbyproxy': 'proxy_load',
+                    'proxy': 'proxy_load',
                 }
                 
                 event_type = event_type_map.get(event_type_lower, event_type_raw)
+                
+                # Log unmapped event types for debugging
+                if event_type_lower and event_type_lower not in event_type_map:
+                    logger.warning(f"Unknown event type: '{event_type_raw}' (lowercase: '{event_type_lower}') - will be stored as-is")
                 
                 # Count each event type
                 if event_type in email_data[msg_id]:
@@ -741,9 +908,11 @@ def main():
                     email_data[msg_id]["last_event"] = event_type_raw
                     email_data[msg_id]["last_event_date"] = current_date
                 
-                # Track earliest send date (request or delivered events)
-                if event_type in ('requests', 'delivered'):
-                    if not email_data[msg_id]["send_date"] or (current_date and current_date < email_data[msg_id]["send_date"]):
+                # Track earliest send date (from ANY event - use event date as proxy for send date)
+                # CRITICAL FIX: Use earliest event date regardless of type, since some campaigns
+                # may not have 'request' or 'delivered' events (e.g., blocked immediately)
+                if current_date:
+                    if not email_data[msg_id]["send_date"] or current_date < email_data[msg_id]["send_date"]:
                         email_data[msg_id]["send_date"] = current_date
 
                 # Track clicked links
@@ -796,22 +965,109 @@ def main():
                 ):
                     grouped_data[group_key]["last_event_date"] = data["last_event_date"]
                 
-                # Update send date (earliest)
+                # Update send date (earliest) - CRITICAL for campaign filtering
                 if data["send_date"]:
                     if not grouped_data[group_key]["send_date"] or data["send_date"] < grouped_data[group_key]["send_date"]:
                         grouped_data[group_key]["send_date"] = data["send_date"]
+                else:
+                    # Log recipients without send_date for debugging
+                    logger.debug(f"Recipient {data['email']} in campaign {group_key} has no send_date")
+            
+            # LOG CHECKPOINT 5: After grouping by campaign batch
+            logger.info(f"\n{'='*60}")
+            logger.info(f"CHECKPOINT 5: After Campaign Grouping")
+            logger.info(f"Unique message_ids (recipients): {len(email_data)}")
+            logger.info(f"Unique campaigns (batches): {len(grouped_data)}")
+            for group_key, campaign in list(grouped_data.items())[:10]:  # Show first 10 campaigns
+                logger.info(f"  Campaign: {group_key[:30]}... | Subject: {campaign['subject'][:50]} | Send Date: {campaign['send_date']} | Recipients: {campaign['total_sent']}")
+                # Log sample recipient details for debugging
+                if campaign['total_sent'] > 0 and campaign['total_sent'] <= 3:
+                    for recipient in campaign['recipients']:
+                        logger.debug(f"    - {recipient['email']}: delivered={recipient['delivered']}, opened={recipient['opened']}, send_date={recipient['send_date']}")
+            logger.info(f"{'='*60}\n")
+            
+            # --- NEW: Filter campaigns by SEND DATE (not last activity) ---
+            # This ensures campaigns are filtered based on when they were actually sent,
+            # not when recipients opened or clicked emails
+            # Use start_date (user's selected range) for accurate filtering
+            campaigns_before_filter = len(grouped_data)
+            filtered_grouped_data = {}
+            
+            # Create datetime objects for comparison with proper timezone
+            filter_start = start_date  # Use user's selected time range, not API range
+            filter_end = end_date  # Use end_date as-is (it's already timezone-aware)
+            
+            for group_key, campaign in grouped_data.items():
+                campaign_send_date = campaign.get("send_date", "")
+                
+                # CRITICAL: Exclude campaigns without send_date (pending/not sent yet)
+                if not campaign_send_date:
+                    logger.info(f"⏳ Excluding pending campaign {group_key} (no send_date - status: En attente) - {campaign['total_sent']} recipients")
+                    continue
+                
+                try:
+                    # Parse campaign send date
+                    if 'T' in campaign_send_date:
+                        if campaign_send_date.endswith('Z'):
+                            campaign_datetime = datetime.fromisoformat(campaign_send_date.replace('Z', '+00:00'))
+                        elif '+' in campaign_send_date or campaign_send_date.count('-') > 2:
+                            campaign_datetime = datetime.fromisoformat(campaign_send_date)
+                        else:
+                            campaign_datetime = datetime.fromisoformat(campaign_send_date).replace(tzinfo=timezone.utc)
+                    else:
+                        campaign_datetime = datetime.strptime(campaign_send_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    
+                    if campaign_datetime.tzinfo is None:
+                        campaign_datetime = campaign_datetime.replace(tzinfo=timezone.utc)
+                    
+                    # Filter: use api_start_date (broader) to avoid over-filtering
+                    # This includes campaigns sent in the API fetch window
+                    if filter_start <= campaign_datetime <= filter_end:
+                        filtered_grouped_data[group_key] = campaign
+                    else:
+                        logger.info(f"❌ Excluding campaign {group_key[:30]}... - sent {campaign_datetime.strftime('%Y-%m-%d %H:%M')}, outside range {filter_start.strftime('%Y-%m-%d %H:%M')} to {filter_end.strftime('%Y-%m-%d %H:%M')} - {campaign['total_sent']} recipients")
+                        
+                except (ValueError, AttributeError) as e:
+                    logger.warning(f"Could not parse campaign send_date '{campaign_send_date}': {e}, including campaign")
+                    filtered_grouped_data[group_key] = campaign
+            
+            grouped_data = filtered_grouped_data
+            campaigns_filtered_out = campaigns_before_filter - len(grouped_data)
+            
+            # LOG CHECKPOINT 6: After campaign date filtering
+            logger.info(f"\n{'='*60}")
+            logger.info(f"CHECKPOINT 6: After Campaign Date Filtering")
+            logger.info(f"Campaigns before date filter: {campaigns_before_filter}")
+            logger.info(f"Campaigns after date filter: {len(grouped_data)}")
+            logger.info(f"Campaigns filtered out: {campaigns_filtered_out}")
+            logger.info(f"Filter range (USER'S SELECTED): {filter_start.strftime('%Y-%m-%d %H:%M')} to {filter_end.strftime('%Y-%m-%d %H:%M')}")
+            if len(grouped_data) > 0:
+                logger.info(f"Remaining campaigns:")
+                for group_key, campaign in list(grouped_data.items())[:10]:
+                    logger.info(f"  {campaign['send_date']} | {campaign['subject'][:50]} | {campaign['total_sent']} recipients")
+            else:
+                logger.error(f"⚠️ NO CAMPAIGNS REMAINING after filter! This is the bug.")
+            logger.info(f"{'='*60}\n")
+            
+            # --- END NEW ---
+
+            # Filter out deleted campaigns
+            grouped_data = {
+                k: v for k, v in grouped_data.items()
+                if k not in st.session_state.deleted_campaigns
+            }
 
             # Overall metrics
-            total_emails = len(email_data)
-            total_delivered = sum(1 for e in email_data.values() if e["delivered"] > 0)
-            total_opened = sum(1 for e in email_data.values() if e["opened"] > 0)
-            total_clicked = sum(1 for e in email_data.values() if e["clicks"] > 0)
-            # Invalid = hard bounces OR soft bounces with invalid reasons (like connection timeout)
-            total_invalid = sum(1 for e in email_data.values() 
+            active_emails = [e for group_key, group in grouped_data.items() for e in group["recipients"]]
+            
+            total_emails = len(active_emails)
+            total_delivered = sum(1 for e in active_emails if e["delivered"] > 0)
+            total_opened = sum(1 for e in active_emails if e["opened"] > 0)
+            total_clicked = sum(1 for e in active_emails if e["clicks"] > 0)
+            total_invalid = sum(1 for e in active_emails 
                               if (e["hardBounces"] > 0 or 
                                   (e["softBounces"] > 0 and is_soft_bounce_actually_invalid(e["bounce_reason"]))))
-            # Failed = blocked, errors, or soft bounces (excluding those that are actually invalid)
-            total_failed = sum(1 for e in email_data.values() 
+            total_failed = sum(1 for e in active_emails 
                              if ((e["blocked"] > 0 or e["error"] > 0 or 
                                   (e["softBounces"] > 0 and not is_soft_bounce_actually_invalid(e["bounce_reason"]))) 
                                  and e["hardBounces"] == 0))
@@ -900,12 +1156,23 @@ def main():
 
             st.markdown("---")
 
-            # Sort campaigns by send date (newest first)
-            # Use send_date (earliest send time) instead of last_event_date for proper chronological order
+            # Sort campaigns by send date (newest first) with robust fallback
+            # CRITICAL: Use send_date (when campaign was sent), not last_event_date (recent activity)
+            def get_sort_date(campaign_tuple):
+                """Extract sortable date from campaign, with fallback to ensure newest first."""
+                group_key, group = campaign_tuple
+                send_date = group.get("send_date", "")
+                
+                # If no send_date, use a very old date so it appears at bottom
+                if not send_date or send_date == "N/A":
+                    return "1970-01-01T00:00:00+00:00"
+                
+                return send_date
+            
             sorted_campaigns = sorted(
                 grouped_data.items(),
-                key=lambda x: x[1]["send_date"] if x[1]["send_date"] else x[1]["last_event_date"] if x[1]["last_event_date"] else "",
-                reverse=True
+                key=get_sort_date,
+                reverse=True  # True = newest first (descending order)
             )
             
             # Group campaigns by date
@@ -969,12 +1236,17 @@ def main():
                         
                         st.markdown('<div class="main-panel">', unsafe_allow_html=True)
                         
-                        # === Campaign Title & Metadata with Refresh Button ===
-                        title_col, refresh_col = st.columns([10, 1])
+                        # === Campaign Title & Metadata with Action Buttons ===
+                        title_col, refresh_col, delete_col = st.columns([8, 1, 1])
                         with title_col:
                             st.markdown(f'<div class="campaign-title">{group["subject"]}</div>', unsafe_allow_html=True)
                         with refresh_col:
                             if st.button("🔄", key=f"refresh_{group_key}", help=_t("Refresh Data"), type="primary"):
+                                st.rerun()
+                        with delete_col:
+                            if st.button("🗑️", key=f"delete_{group_key}", help=_t("Delete (Hide) Campaign")):
+                                st.session_state.deleted_campaigns.add(group_key)
+                                st.session_state.selected_campaign = None
                                 st.rerun()
                         
                         # Format timestamp
@@ -1210,32 +1482,36 @@ def main():
                             elif r["blocked"] > 0 or r["error"] > 0 or r["softBounces"] > 0:
                                 delivery_status = _t("❌ Failed")
                                 status_priority = 2
-                            # Check for successful delivery
-                            elif r["delivered"] > 0:
-                                # Determine engagement level
+                            # Check for real engagement (clicks prove real user interaction)
+                            elif r["clicks"] > 0:
                                 has_opened = r["opened"] > 0
-                                has_clicked = r["clicks"] > 0
-                                
-                                if has_clicked and has_opened:
+                                if has_opened:
                                     delivery_status = _t("🎯 Engaged (Opened & Clicked)")
                                     status_priority = 3
-                                elif has_clicked:
-                                    delivery_status = _t("🔗 Clicked (without open tracking)")
-                                    status_priority = 4
-                                elif has_opened:
-                                    delivery_status = _t("📖 Opened")
-                                    status_priority = 5
                                 else:
-                                    delivery_status = _t("✅ Delivered")
-                                    status_priority = 6
+                                    delivery_status = _t("🔗 Clicked")
+                                    status_priority = 4
+                            # Check for opens (real user opens, not proxy loads)
+                            elif r["opened"] > 0:
+                                delivery_status = _t("📖 Opened")
+                                status_priority = 5
+                            # Check for successful delivery without engagement
+                            elif r["delivered"] > 0:
+                                delivery_status = _t("✅ Delivered")
+                                status_priority = 6
                             # Check for deferred (temporary delay, might still be sending)
                             elif r["deferred"] > 0:
                                 delivery_status = _t("⚠️ Delayed")
                                 status_priority = 7
+                            # Check if request was made (email was sent to Brevo)
+                            elif r["requests"] > 0 or r["send_date"]:
+                                # Has send_date but no delivery confirmation yet
+                                delivery_status = _t("📤 Sent (awaiting confirmation)")
+                                status_priority = 8
                             # Default to pending (no events received yet)
                             else:
                                 delivery_status = _t("⏳ Pending")
-                                status_priority = 8
+                                status_priority = 9
                             
                             # Format timestamp
                             timestamp_str = r["last_event_date"]

@@ -9,8 +9,17 @@ from typing import Dict, List, Optional, Tuple
 from functools import wraps
 
 # Import Brevo SDK
-import brevo_python as sib_api_v3_sdk
-from brevo_python.rest import ApiException
+try:
+    import brevo_python as sib_api_v3_sdk
+    from brevo_python.rest import ApiException
+except ModuleNotFoundError:
+    try:
+        import sib_api_v3_sdk
+        from sib_api_v3_sdk.rest import ApiException
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "Brevo SDK not installed. Install 'brevo-python' or 'sib-api-v3-sdk'."
+        ) from exc
 from config import (
     BREVO_API_KEY, 
     FAILED_EMAILS_LOG_PATH,
